@@ -822,8 +822,8 @@ var tcase_cmp_any = []map[string]interface{}{
 	map[string]interface{}{
 		"obj1": "1",
 		"obj2": "2.0",
-		"op":   "<",
-		"exp":  true,
+		"op":   ">",
+		"exp":  false,
 		"err":  nil,
 	},
 	map[string]interface{}{
