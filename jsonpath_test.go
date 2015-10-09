@@ -570,7 +570,7 @@ func Test_jsonpath_get_range(t *testing.T) {
 }
 
 func Test_jsonpath_types_eval(t *testing.T) {
-	res, err := types.Eval("1 < 1", nil, nil)
+	res, err := types.Eval(nil, nil, 0, "1 < 1")
 	fmt.Println(err, res, res.Type, res.Value, res.IsValue())
 }
 
