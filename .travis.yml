@@ -12,7 +12,7 @@ before_install:
     - echo $GOPATH
     - echo $GOROOT
 
-script:
-   - cd $GOPATH/src/github.com/oliveagle/jsonpath
-   # test script
-   - go test . -v
+# script:
+#    - cd $GOPATH/src/github.com/oliveagle/jsonpath
+#    # test script
+#    - go test . -v
