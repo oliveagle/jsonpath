@@ -1,6 +1,8 @@
 JsonPath
 ----------------
 
+![Build Status](https://travis-ci.org/oliveagle/jsonpath.svg?branch=master)
+
 A golang implementation of JsonPath syntax.
 follow the majority rules in http://goessner.net/articles/JsonPath/
 but also with some minor differences.
