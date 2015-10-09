@@ -2,17 +2,6 @@ language: go
 
 go:
   - 1.4.2
-  - tip
+  - 1.5.1
 
-os: [linux, osx]
-
-osx_image: mavericks
-
-before_install:
-    - echo $GOPATH
-    - echo $GOROOT
-
-# script:
-#    - cd $GOPATH/src/github.com/oliveagle/jsonpath
-#    # test script
-#    - go test . -v
+os: linux
