@@ -9,6 +9,8 @@ but also with some minor differences.
 
 this library is till bleeding edge, so use it at your own risk. :D
 
+**Golang Version Required**: 1.5+
+
 Get Started
 ------------
 
@@ -102,4 +104,5 @@ example json path syntax.
 | $.store.book[?(@.price > 10)].title | ["Sword of Honour", "The Lord of the Rings"]|
 | $.store.book[?(@.price < $.expensive)].price | [8.95, 8.99] |
 | $.store.book[:].price | [8.9.5, 12.99, 8.9.9, 22.99] |
+
 

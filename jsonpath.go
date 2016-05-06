@@ -3,7 +3,9 @@ package jsonpath
 import (
 	"fmt"
 	"github.com/mohae/utilitybelt/deepcopy"
-	"golang.org/x/tools/go/types"
+	//"golang.org/x/tools/go/types"
+	"go/token"
+	"go/types"
 	"reflect"
 	"strconv"
 	"strings"
@@ -475,7 +477,8 @@ func cmp_any(obj1, obj2 interface{}, op string) (bool, error) {
 	fmt.Println("cmp_any: ", obj1, obj2)
 	exp := fmt.Sprintf("%v %s %v", obj1, op, obj2)
 	fmt.Println("exp: ", exp)
-	res, err := types.Eval(nil, nil, 0, exp)
+	fset := token.NewFileSet()
+	res, err := types.Eval(fset, nil, 0, exp)
 	if err != nil {
 		return false, err
 	}
