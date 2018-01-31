@@ -943,3 +943,17 @@ func Test_jsonpath_string_equal(t *testing.T) {
 		t.Fatalf("not the same: %v", res)
 	}
 }
+
+func Test_jsonpath_null_in_the_middle(t *testing.T) {
+	data := `{
+  "head_commit": null,
+}
+`
+
+	var j interface{}
+
+	json.Unmarshal([]byte(data), &j)
+
+	res, err := JsonPathLookup(j, "$.head_commit.author.username")
+	t.Log(res, err)
+}
