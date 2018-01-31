@@ -611,10 +611,19 @@ var tcase_parse_filter = []map[string]interface{}{
 		"exp_rp":  "/.*REES/i",
 		"exp_err": nil,
 	},
+
+	// 4
+	{
+		"filter": "@.author == 'Nigel Rees'",
+		"exp_lp": "@.author",
+		"exp_op": "==",
+		"exp_rp": "Nigel Rees",
+	},
 }
 
 func Test_jsonpath_parse_filter(t *testing.T) {
 
+	//for _, tcase := range tcase_parse_filter[4:] {
 	for _, tcase := range tcase_parse_filter {
 		lp, op, rp, _ := parse_filter(tcase["filter"].(string))
 		t.Log(tcase)
@@ -794,7 +803,12 @@ func Test_jsonpath_eval_filter(t *testing.T) {
 	}
 }
 
+var (
+	ifc1 interface{} = "haha"
+	ifc2 interface{} = "ha ha"
+)
 var tcase_cmp_any = []map[string]interface{}{
+
 	map[string]interface{}{
 		"obj1": 1,
 		"obj2": 1,
@@ -836,26 +850,96 @@ var tcase_cmp_any = []map[string]interface{}{
 		"op":   "=~",
 		"exp":  false,
 		"err":  "op should only be <, <=, ==, >= and >",
+	},{
+		"obj1": ifc1,
+		"obj2": ifc1,
+		"op":   "==",
+		"exp":  true,
+		"err": nil,
+	},{
+		"obj1": ifc2,
+		"obj2": ifc2,
+		"op":   "==",
+		"exp":  true,
+		"err": nil,
 	},
 }
 
 func Test_jsonpath_cmp_any(t *testing.T) {
 	for idx, tcase := range tcase_cmp_any {
+		//for idx, tcase := range tcase_cmp_any[6:] {
 		t.Logf("idx: %v, %v %v %v, exp: %v", idx, tcase["obj1"], tcase["op"], tcase["obj2"], tcase["exp"])
 		res, err := cmp_any(tcase["obj1"], tcase["obj2"], tcase["op"].(string))
 		exp := tcase["exp"].(bool)
 		exp_err := tcase["err"]
-		if exp_err != nil && err == nil {
-			t.Errorf("idx: error not raised: %v(exp)", idx, exp_err)
-			return
+		if exp_err != nil {
+			if err == nil {
+				t.Errorf("idx: error not raised: %v(exp)", idx, exp_err)
+				break
+			}
 		} else {
-			continue
-		}
-		if err != nil {
-			t.Errorf("idx: %v, error: %v", idx, err)
+			if err != nil {
+				t.Errorf("idx: %v, error: %v", idx, err)
+				break
+			}
 		}
 		if res != exp {
 			t.Errorf("idx: %v, %v(got) != %v(exp)", idx, res, exp)
+			break
 		}
+	}
+}
+
+func Test_jsonpath_string_equal(t *testing.T) {
+	data := `{
+    "store": {
+        "book": [
+            {
+                "category": "reference",
+                "author": "Nigel Rees",
+                "title": "Sayings of the Century",
+                "price": 8.95
+            },
+            {
+                "category": "fiction",
+                "author": "Evelyn Waugh",
+                "title": "Sword of Honour",
+                "price": 12.99
+            },
+            {
+                "category": "fiction",
+                "author": "Herman Melville",
+                "title": "Moby Dick",
+                "isbn": "0-553-21311-3",
+                "price": 8.99
+            },
+            {
+                "category": "fiction",
+                "author": "J. R. R. Tolkien",
+                "title": "The Lord of the Rings",
+                "isbn": "0-395-19395-8",
+                "price": 22.99
+            }
+        ],
+        "bicycle": {
+            "color": "red",
+            "price": 19.95
+        }
+    },
+    "expensive": 10
+}`
+
+
+	var j interface{}
+
+	json.Unmarshal([]byte(data), &j)
+
+	res, err := JsonPathLookup(j, "$.store.book[?(@.author == 'Nigel Rees')].price")
+	t.Log(res, err)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if fmt.Sprintf("%v", res) != "[8.95]" {
+		t.Fatalf("not the same: %v", res)
 	}
 }

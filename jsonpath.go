@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"errors"
 )
 
 func JsonPathLookup(obj interface{}, jpath string) (interface{}, error) {
@@ -278,6 +279,7 @@ func get_key(obj interface{}, key string) (interface{}, error) {
 	switch reflect.TypeOf(obj).Kind() {
 	case reflect.Map:
 		for _, kv := range reflect.ValueOf(obj).MapKeys() {
+			//fmt.Println(kv.String())
 			if kv.String() == key {
 				return reflect.ValueOf(obj).MapIndex(kv).Interface(), nil
 			}
@@ -400,6 +402,57 @@ func get_filtered(obj, root interface{}, filter string) ([]interface{}, error) {
 
 func parse_filter(filter string) (lp string, op string, rp string, err error) {
 	tmp := ""
+
+	stage := 0
+	str_embrace := false
+	for idx, c := range filter {
+		switch c {
+		case '\'':
+			if str_embrace == false {
+				str_embrace = true
+			} else {
+				switch stage {
+				case 0: lp = tmp
+				case 1: op = tmp
+				case 2: rp = tmp
+				}
+				tmp = ""
+			}
+		case ' ':
+			if str_embrace == true {
+				tmp += string(c)
+				continue
+			}
+			switch stage {
+			case 0: lp = tmp
+			case 1: op = tmp
+			case 2: rp = tmp
+			}
+			tmp = ""
+
+			stage += 1
+			if stage > 2 {
+				return "", "", "", errors.New(fmt.Sprintf("invalid char at %d: `%s`", idx, c))
+			}
+		default:
+			tmp += string(c)
+		}
+	}
+	if tmp != "" {
+		switch stage {
+		case 0:
+			lp = tmp
+			op = "exists"
+		case 1: op = tmp
+		case 2: rp = tmp
+		}
+		tmp = ""
+	}
+	return lp, op, rp, err
+}
+
+func parse_filter_v1(filter string) (lp string, op string, rp string, err error) {
+	tmp := ""
 	istoken := false
 	for _, c := range filter {
 		if istoken == false && c != ' ' {
@@ -468,14 +521,37 @@ func eval_filter(obj, root interface{}, lp, op, rp string) (res bool, err error)
 	}
 }
 
+func isNumber(s string) bool {
+	dot_cnt := 0
+	for _, c := range s {
+		if c == '.' {
+			dot_cnt += 1
+			if dot_cnt > 1 {
+				return false
+			}
+		} else if ( c >= '0' && c <= '9') {
+			continue
+		} else {
+			return false
+		}
+	}
+	return true
+}
+
 func cmp_any(obj1, obj2 interface{}, op string) (bool, error) {
 	switch op {
 	case "<", "<=", "==", ">=", ">":
 	default:
 		return false, fmt.Errorf("op should only be <, <=, ==, >= and >")
 	}
-	//fmt.Println("cmp_any: ", obj1, obj2)
-	exp := fmt.Sprintf("%v %s %v", obj1, op, obj2)
+
+
+	var exp string
+	if isNumber(fmt.Sprintf("%s", obj1)) && isNumber(fmt.Sprintf("%s", obj2)) {
+		exp = fmt.Sprintf(`%v %s %v`, obj1, op, obj2)
+	} else {
+		exp = fmt.Sprintf(`"%v" %s "%v"`, obj1, op, obj2)
+	}
 	//fmt.Println("exp: ", exp)
 	fset := token.NewFileSet()
 	res, err := types.Eval(fset, nil, 0, exp)
