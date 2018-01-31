@@ -12,6 +12,8 @@ import (
 	"errors"
 )
 
+var ErrGetFromNullObj = errors.New("get attribute from null object")
+
 func JsonPathLookup(obj interface{}, jpath string) (interface{}, error) {
 	steps, err := tokenize(jpath)
 	//fmt.Println("f: steps: ", steps, err)
@@ -276,6 +278,9 @@ func filter_get_from_explicit_path(obj interface{}, path string) (interface{}, e
 }
 
 func get_key(obj interface{}, key string) (interface{}, error) {
+	if reflect.TypeOf(obj) == nil {
+		return nil, ErrGetFromNullObj
+	}
 	switch reflect.TypeOf(obj).Kind() {
 	case reflect.Map:
 		for _, kv := range reflect.ValueOf(obj).MapKeys() {
