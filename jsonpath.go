@@ -526,21 +526,23 @@ func eval_filter(obj, root interface{}, lp, op, rp string) (res bool, err error)
 	}
 }
 
-func isNumber(s string) bool {
-	dot_cnt := 0
-	for _, c := range s {
-		if c == '.' {
-			dot_cnt += 1
-			if dot_cnt > 1 {
-				return false
-			}
-		} else if ( c >= '0' && c <= '9') {
-			continue
+func isNumber(o interface{}) bool {
+	switch v := o.(type) {
+	case int,int8,int16,int32,int64:
+		return true
+	case uint,uint8,uint16,uint32,uint64:
+		return true
+	case float32,float64:
+		return true
+	case string:
+		_, err := strconv.ParseFloat(v, 64)
+		if err == nil {
+			return true
 		} else {
 			return false
 		}
 	}
-	return true
+	return false
 }
 
 func cmp_any(obj1, obj2 interface{}, op string) (bool, error) {
@@ -550,9 +552,8 @@ func cmp_any(obj1, obj2 interface{}, op string) (bool, error) {
 		return false, fmt.Errorf("op should only be <, <=, ==, >= and >")
 	}
 
-
 	var exp string
-	if isNumber(fmt.Sprintf("%s", obj1)) && isNumber(fmt.Sprintf("%s", obj2)) {
+	if isNumber(obj1) && isNumber(obj2) {
 		exp = fmt.Sprintf(`%v %s %v`, obj1, op, obj2)
 	} else {
 		exp = fmt.Sprintf(`"%v" %s "%v"`, obj1, op, obj2)
@@ -569,5 +570,6 @@ func cmp_any(obj1, obj2 interface{}, op string) (bool, error) {
 	if res.Value.String() == "true" {
 		return true, nil
 	}
+
 	return false, nil
 }

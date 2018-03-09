@@ -862,12 +862,18 @@ var tcase_cmp_any = []map[string]interface{}{
 		"op":   "==",
 		"exp":  true,
 		"err": nil,
+	},{
+		"obj1": 20,
+		"obj2": "100",
+		"op": ">",
+		"exp": false,
+		"err": nil,
 	},
 }
 
 func Test_jsonpath_cmp_any(t *testing.T) {
 	for idx, tcase := range tcase_cmp_any {
-		//for idx, tcase := range tcase_cmp_any[6:] {
+		//for idx, tcase := range tcase_cmp_any[8:] {
 		t.Logf("idx: %v, %v %v %v, exp: %v", idx, tcase["obj1"], tcase["op"], tcase["obj2"], tcase["exp"])
 		res, err := cmp_any(tcase["obj1"], tcase["obj2"], tcase["op"].(string))
 		exp := tcase["exp"].(bool)
@@ -956,4 +962,24 @@ func Test_jsonpath_null_in_the_middle(t *testing.T) {
 
 	res, err := JsonPathLookup(j, "$.head_commit.author.username")
 	t.Log(res, err)
+}
+
+func Test_jsonpath_num_cmp(t *testing.T) {
+	data := `{
+	"books": [ 
+                { "name": "My First Book", "price": 10 }, 
+		{ "name": "My Second Book", "price": 20 } 
+		]
+}`
+	var j interface{}
+	json.Unmarshal([]byte(data), &j)
+	res, err := JsonPathLookup(j, "$.books[?(@.price > 100)].name")
+	if err != nil {
+		t.Fatal(err)
+	}
+	arr := res.([]interface{})
+	if len(arr) != 0 {
+		t.Fatal("should return [], got: ", arr)
+	}
+
 }
