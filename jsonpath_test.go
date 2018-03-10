@@ -110,7 +110,7 @@ func Test_jsonpath_JsonPathLookup_1(t *testing.T) {
 func Test_jsonpath_JsonPathLookup_filter(t *testing.T) {
 	res, err := JsonPathLookup(json_data, "$.store.book[?(@.isbn)].isbn")
 	t.Log(err, res)
-	return
+
 	if res_v, ok := res.([]interface{}); ok != true {
 		if res_v[0].(string) != "0-553-21311-3" || res_v[1].(string) != "0-395-19395-8" {
 			t.Errorf("error: %v", res)
@@ -360,7 +360,7 @@ func Test_jsonpath_parse_token(t *testing.T) {
 			if args_v, ok := args.([]int); ok == true {
 				for i, v := range args_v {
 					if v != exp_args.([]int)[i] {
-						t.Errorf("ERROR: different args: [%d], (got)%v != (exp)%v", v, exp_args.([]int)[i])
+						t.Errorf("ERROR: different args: [%d], (got)%v != (exp)%v", i, v, exp_args.([]int)[i])
 						return
 					}
 				}
@@ -850,24 +850,24 @@ var tcase_cmp_any = []map[string]interface{}{
 		"op":   "=~",
 		"exp":  false,
 		"err":  "op should only be <, <=, ==, >= and >",
-	},{
+	}, {
 		"obj1": ifc1,
 		"obj2": ifc1,
 		"op":   "==",
 		"exp":  true,
-		"err": nil,
-	},{
+		"err":  nil,
+	}, {
 		"obj1": ifc2,
 		"obj2": ifc2,
 		"op":   "==",
 		"exp":  true,
-		"err": nil,
-	},{
+		"err":  nil,
+	}, {
 		"obj1": 20,
 		"obj2": "100",
-		"op": ">",
-		"exp": false,
-		"err": nil,
+		"op":   ">",
+		"exp":  false,
+		"err":  nil,
 	},
 }
 
@@ -880,7 +880,7 @@ func Test_jsonpath_cmp_any(t *testing.T) {
 		exp_err := tcase["err"]
 		if exp_err != nil {
 			if err == nil {
-				t.Errorf("idx: error not raised: %v(exp)", idx, exp_err)
+				t.Errorf("idx: %d error not raised: %v(exp)", idx, exp_err)
 				break
 			}
 		} else {
@@ -934,7 +934,6 @@ func Test_jsonpath_string_equal(t *testing.T) {
     },
     "expensive": 10
 }`
-
 
 	var j interface{}
 

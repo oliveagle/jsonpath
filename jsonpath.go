@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"github.com/mohae/utilitybelt/deepcopy"
 	//"golang.org/x/tools/go/types"
+	"errors"
 	"go/token"
 	"go/types"
 	"reflect"
 	"strconv"
 	"strings"
-	"errors"
 )
 
 var ErrGetFromNullObj = errors.New("get attribute from null object")
@@ -417,9 +417,12 @@ func parse_filter(filter string) (lp string, op string, rp string, err error) {
 				str_embrace = true
 			} else {
 				switch stage {
-				case 0: lp = tmp
-				case 1: op = tmp
-				case 2: rp = tmp
+				case 0:
+					lp = tmp
+				case 1:
+					op = tmp
+				case 2:
+					rp = tmp
 				}
 				tmp = ""
 			}
@@ -429,15 +432,18 @@ func parse_filter(filter string) (lp string, op string, rp string, err error) {
 				continue
 			}
 			switch stage {
-			case 0: lp = tmp
-			case 1: op = tmp
-			case 2: rp = tmp
+			case 0:
+				lp = tmp
+			case 1:
+				op = tmp
+			case 2:
+				rp = tmp
 			}
 			tmp = ""
 
 			stage += 1
 			if stage > 2 {
-				return "", "", "", errors.New(fmt.Sprintf("invalid char at %d: `%s`", idx, c))
+				return "", "", "", errors.New(fmt.Sprintf("invalid char at %d: `%c`", idx, c))
 			}
 		default:
 			tmp += string(c)
@@ -448,8 +454,10 @@ func parse_filter(filter string) (lp string, op string, rp string, err error) {
 		case 0:
 			lp = tmp
 			op = "exists"
-		case 1: op = tmp
-		case 2: rp = tmp
+		case 1:
+			op = tmp
+		case 2:
+			rp = tmp
 		}
 		tmp = ""
 	}
@@ -528,11 +536,11 @@ func eval_filter(obj, root interface{}, lp, op, rp string) (res bool, err error)
 
 func isNumber(o interface{}) bool {
 	switch v := o.(type) {
-	case int,int8,int16,int32,int64:
+	case int, int8, int16, int32, int64:
 		return true
-	case uint,uint8,uint16,uint32,uint64:
+	case uint, uint8, uint16, uint32, uint64:
 		return true
-	case float32,float64:
+	case float32, float64:
 		return true
 	case string:
 		_, err := strconv.ParseFloat(v, 64)
