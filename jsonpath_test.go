@@ -55,6 +55,18 @@ func init() {
 	json.Unmarshal([]byte(data), &json_data)
 }
 
+func Benchmark_JsonPathLookup(b *testing.B) {
+	for n := 0; n < b.N; n++ {
+		res, err := JsonPathLookup(json_data, "$.store.book[0].price")
+		if res_v, ok := res.(float64); ok != true || res_v != 8.95 {
+			b.Errorf("$.store.book[0].price should be 8.95")
+		}
+		if err != nil {
+			b.Errorf("Unexpected error: %v", err)
+		}
+	}
+}
+
 func Test_jsonpath_JsonPathLookup_1(t *testing.T) {
 	// key from root
 	res, _ := JsonPathLookup(json_data, "$.expensive")

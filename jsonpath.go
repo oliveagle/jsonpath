@@ -283,6 +283,16 @@ func get_key(obj interface{}, key string) (interface{}, error) {
 	}
 	switch reflect.TypeOf(obj).Kind() {
 	case reflect.Map:
+		// if obj came from stdlib json, its highly likely to be a map[string]interface{}
+		// in which case we can save having to iterate the map keys to work out if the
+		// key exists
+		if jsonMap, ok := obj.(map[string]interface{}); ok {
+			val, exists := jsonMap[key]
+			if !exists {
+				return nil, fmt.Errorf("key error: %s not found in object", key)
+			}
+			return val, nil
+		}
 		for _, kv := range reflect.ValueOf(obj).MapKeys() {
 			//fmt.Println(kv.String())
 			if kv.String() == key {
