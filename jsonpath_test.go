@@ -3,7 +3,6 @@ package jsonpath
 import (
 	"encoding/json"
 	"fmt"
-	//"golang.org/x/tools/go/types"
 	"go/token"
 	"go/types"
 	"reflect"
@@ -53,18 +52,6 @@ func init() {
 }
 `
 	json.Unmarshal([]byte(data), &json_data)
-}
-
-func Benchmark_JsonPathLookup(b *testing.B) {
-	for n := 0; n < b.N; n++ {
-		res, err := JsonPathLookup(json_data, "$.store.book[0].price")
-		if res_v, ok := res.(float64); ok != true || res_v != 8.95 {
-			b.Errorf("$.store.book[0].price should be 8.95")
-		}
-		if err != nil {
-			b.Errorf("Unexpected error: %v", err)
-		}
-	}
 }
 
 func Test_jsonpath_JsonPathLookup_1(t *testing.T) {
@@ -996,7 +983,73 @@ func Test_jsonpath_num_cmp(t *testing.T) {
 }
 
 func BenchmarkJsonPathLookup(b *testing.B) {
+	for n := 0; n < b.N; n++ {
+		res, err := JsonPathLookup(json_data, "$.store.book[0].price")
+		if res_v, ok := res.(float64); ok != true || res_v != 8.95 {
+			b.Errorf("$.store.book[0].price should be 8.95")
+		}
+		if err != nil {
+			b.Errorf("Unexpected error: %v", err)
+		}
+	}
+}
+
+func BenchmarkJsonPathLookup_0(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		JsonPathLookup(json_data, "$.books[?(@.price > 20)].name")
+		JsonPathLookup(json_data, "$.expensive")
+	}
+}
+
+func BenchmarkJsonPathLookup_1(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		JsonPathLookup(json_data, "$.store.book[0].price")
+	}
+}
+
+func BenchmarkJsonPathLookup_2(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		JsonPathLookup(json_data, "$.store.book[-1].price")
+	}
+}
+
+func BenchmarkJsonPathLookup_3(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		JsonPathLookup(json_data, "$.store.book[0,1].price")
+	}
+}
+
+func BenchmarkJsonPathLookup_4(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		JsonPathLookup(json_data, "$.store.book[0:2].price")
+	}
+}
+
+func BenchmarkJsonPathLookup_5(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		JsonPathLookup(json_data, "$.store.book[?(@.isbn)].price")
+	}
+}
+
+func BenchmarkJsonPathLookup_6(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		JsonPathLookup(json_data, "$.store.book[?(@.price > 10)].title")
+	}
+}
+
+func BenchmarkJsonPathLookup_7(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		JsonPathLookup(json_data, "$.store.book[?(@.price < $.expensive)].price")
+	}
+}
+
+func BenchmarkJsonPathLookup_8(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		JsonPathLookup(json_data, "$.store.book[:].price")
+	}
+}
+
+func BenchmarkJsonPathLookup_9(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		JsonPathLookup(json_data, "$.store.book[?(@.author == 'Nigel Rees')].price")
 	}
 }
