@@ -6,6 +6,7 @@ import (
 	"go/token"
 	"go/types"
 	"reflect"
+	"regexp"
 	"testing"
 )
 
@@ -780,7 +781,7 @@ var tcase_eval_filter = []map[string]interface{}{
 }
 
 func Test_jsonpath_eval_filter(t *testing.T) {
-	for idx, tcase := range tcase_eval_filter {
+	for idx, tcase := range tcase_eval_filter[1:] {
 		fmt.Println("------------------------------")
 		obj := tcase["obj"].(map[string]interface{})
 		root := tcase["root"].(map[string]interface{})
@@ -1051,5 +1052,57 @@ func BenchmarkJsonPathLookup_8(b *testing.B) {
 func BenchmarkJsonPathLookup_9(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		JsonPathLookup(json_data, "$.store.book[?(@.author == 'Nigel Rees')].price")
+	}
+}
+
+func BenchmarkJsonPathLookup_10(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		JsonPathLookup(json_data, "$.store.book[?(@.author =~ /(?i).*REES/)].price")
+	}
+}
+
+func TestReg(t *testing.T) {
+	r := regexp.MustCompile(`(?U).*REES`)
+	t.Log(r)
+	t.Log(r.Match([]byte(`Nigel Rees`)))
+
+	res, err := JsonPathLookup(json_data, "$.store.book[?(@.author =~ /(?i).*REES/ )].author")
+	t.Log(err, res)
+
+	author := res.([]interface{})[0].(string)
+	t.Log(author)
+	if author != "Nigel Rees" {
+		t.Fatal("should be `Nigel Rees` but got: ", author)
+	}
+}
+
+var tcases_reg_op = []struct {
+	Line string
+	Exp  string
+	Err  bool
+}{
+	{``, ``, true},
+	{`xxx`, ``, true},
+	{`/xxx`, ``, true},
+	{`xxx/`, ``, true},
+	{`'/xxx/'`, ``, true},
+	{`"/xxx/"`, ``, true},
+	{`/xxx/`, `xxx`, false},
+	{`/π/`, `π`, false},
+}
+
+func TestRegOp(t *testing.T) {
+	for idx, tcase := range tcases_reg_op {
+		fmt.Println("idx: ", idx, "tcase: ", tcase)
+		res, err := regFilterCompile(tcase.Line)
+		if tcase.Err == true {
+			if err == nil {
+				t.Fatal("expect err but got nil")
+			}
+		} else {
+			if res == nil || res.String() != tcase.Exp {
+				t.Fatal("different. res:", res)
+			}
+		}
 	}
 }

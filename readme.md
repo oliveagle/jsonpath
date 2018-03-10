@@ -95,14 +95,15 @@ example json path syntax.
 
 | jsonpath | result|
 | :--------- | :-------|
-| $.expensive 			  | 10|
-| $.store.book[0].price   | 8.95|
-| $.store.book[-1].isbn   | "0-395-19395-8"|
-| $.store.book[0,1].price | [8.95, 12.99]   |
-| $.store.book[0:2].price | [8.95, 12.99, 8.99]|
-| $.store.book[?(@.isbn)].price |  [8.99, 22.99] |
-| $.store.book[?(@.price > 10)].title | ["Sword of Honour", "The Lord of the Rings"]|
-| $.store.book[?(@.price < $.expensive)].price | [8.95, 8.99] |
-| $.store.book[:].price | [8.9.5, 12.99, 8.9.9, 22.99] |
+| $.expensive 			                           | 10|
+| $.store.book[0].price                            | 8.95|
+| $.store.book[-1].isbn                            | "0-395-19395-8"|
+| $.store.book[0,1].price                          | [8.95, 12.99]   |
+| $.store.book[0:2].price                          | [8.95, 12.99, 8.99]|
+| $.store.book[?(@.isbn)].price                    |  [8.99, 22.99] |
+| $.store.book[?(@.price > 10)].title              | ["Sword of Honour", "The Lord of the Rings"]|
+| $.store.book[?(@.price < $.expensive)].price     | [8.95, 8.99] |
+| $.store.book[:].price                            | [8.9.5, 12.99, 8.9.9, 22.99] |
+| $.store.book[?(@.author =~ /(?i).*REES/)].author | "Nigel Rees" |
 
-
+> Note: golang support regular expression flags in form of `(?imsU)pattern`

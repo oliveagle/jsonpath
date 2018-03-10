@@ -6,6 +6,7 @@ import (
 	"go/token"
 	"go/types"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -78,6 +79,9 @@ func JsonPathLookup(obj interface{}, jpath string) (interface{}, error) {
 				return nil, err
 			}
 			obj, err = get_filtered(obj, obj, args.(string))
+			if err != nil {
+				return nil, err
+			}
 		default:
 			return nil, fmt.Errorf("expression don't support in filter")
 		}
@@ -365,6 +369,19 @@ func get_range(obj, frm, to interface{}) (interface{}, error) {
 	}
 }
 
+func regFilterCompile(rule string) (*regexp.Regexp, error) {
+	runes := []rune(rule)
+	if len(runes) <= 2 {
+		return nil, errors.New("empty rule")
+	}
+
+	if runes[0] != '/' || runes[len(runes)-1] != '/' {
+		return nil, errors.New("invalid syntax. should be in `/pattern/` form")
+	}
+	runes = runes[1 : len(runes)-1]
+	return regexp.Compile(string(runes))
+}
+
 func get_filtered(obj, root interface{}, filter string) ([]interface{}, error) {
 	lp, op, rp, err := parse_filter(filter)
 	if err != nil {
@@ -375,26 +392,64 @@ func get_filtered(obj, root interface{}, filter string) ([]interface{}, error) {
 
 	switch reflect.TypeOf(obj).Kind() {
 	case reflect.Slice:
-		for i := 0; i < reflect.ValueOf(obj).Len(); i++ {
-			tmp := reflect.ValueOf(obj).Index(i).Interface()
-			ok, err := eval_filter(tmp, root, lp, op, rp)
+		if op == "=~" {
+			// regexp
+			pat, err := regFilterCompile(rp)
 			if err != nil {
 				return nil, err
 			}
-			if ok == true {
-				res = append(res, tmp)
+
+			for i := 0; i < reflect.ValueOf(obj).Len(); i++ {
+				tmp := reflect.ValueOf(obj).Index(i).Interface()
+				ok, err := eval_reg_filter(tmp, root, lp, pat)
+				if err != nil {
+					return nil, err
+				}
+				if ok == true {
+					res = append(res, tmp)
+				}
+			}
+		} else {
+			for i := 0; i < reflect.ValueOf(obj).Len(); i++ {
+				tmp := reflect.ValueOf(obj).Index(i).Interface()
+				ok, err := eval_filter(tmp, root, lp, op, rp)
+				if err != nil {
+					return nil, err
+				}
+				if ok == true {
+					res = append(res, tmp)
+				}
 			}
 		}
 		return res, nil
 	case reflect.Map:
-		for _, kv := range reflect.ValueOf(obj).MapKeys() {
-			tmp := reflect.ValueOf(obj).MapIndex(kv).Interface()
-			ok, err := eval_filter(tmp, root, lp, op, rp)
+		if op == "=~" {
+			// regexp
+			pat, err := regFilterCompile(rp)
 			if err != nil {
 				return nil, err
 			}
-			if ok == true {
-				res = append(res, tmp)
+
+			for _, kv := range reflect.ValueOf(obj).MapKeys() {
+				tmp := reflect.ValueOf(obj).MapIndex(kv).Interface()
+				ok, err := eval_reg_filter(tmp, root, lp, pat)
+				if err != nil {
+					return nil, err
+				}
+				if ok == true {
+					res = append(res, tmp)
+				}
+			}
+		} else {
+			for _, kv := range reflect.ValueOf(obj).MapKeys() {
+				tmp := reflect.ValueOf(obj).MapIndex(kv).Interface()
+				ok, err := eval_filter(tmp, root, lp, op, rp)
+				if err != nil {
+					return nil, err
+				}
+				if ok == true {
+					res = append(res, tmp)
+				}
 			}
 		}
 	default:
@@ -507,18 +562,36 @@ func parse_filter_v1(filter string) (lp string, op string, rp string, err error)
 	return lp, op, rp, err
 }
 
-func eval_filter(obj, root interface{}, lp, op, rp string) (res bool, err error) {
+func eval_reg_filter(obj, root interface{}, lp string, pat *regexp.Regexp) (res bool, err error) {
+	if pat == nil {
+		return false, errors.New("nil pat")
+	}
+	lp_v, err := get_lp_v(obj, root, lp)
+	if err != nil {
+		return false, err
+	}
+	switch v := lp_v.(type) {
+	case string:
+		return pat.MatchString(v), nil
+	default:
+		return false, errors.New("only string can match with regular expression")
+	}
+}
+
+func get_lp_v(obj, root interface{}, lp string) (interface{}, error) {
 	var lp_v interface{}
-	//fmt.Println(obj, root)
-	//fmt.Printf("lp: %v, op: %v, rp: %v\n", lp, op, rp)
 	if strings.HasPrefix(lp, "@.") {
-		//fmt.Println("@. ----------------")
-		lp_v, err = filter_get_from_explicit_path(obj, lp)
+		return filter_get_from_explicit_path(obj, lp)
 	} else if strings.HasPrefix(lp, "$.") {
-		lp_v, err = filter_get_from_explicit_path(root, lp)
+		return filter_get_from_explicit_path(root, lp)
 	} else {
 		lp_v = lp
 	}
+	return lp_v, nil
+}
+
+func eval_filter(obj, root interface{}, lp, op, rp string) (res bool, err error) {
+	lp_v, err := get_lp_v(obj, root, lp)
 
 	if op == "exists" {
 		return lp_v != nil, nil
