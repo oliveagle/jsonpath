@@ -55,6 +55,18 @@ func init() {
 	json.Unmarshal([]byte(data), &json_data)
 }
 
+func Benchmark_JsonPathLookup(b *testing.B) {
+	for n := 0; n < b.N; n++ {
+		res, err := JsonPathLookup(json_data, "$.store.book[0].price")
+		if res_v, ok := res.(float64); ok != true || res_v != 8.95 {
+			b.Errorf("$.store.book[0].price should be 8.95")
+		}
+		if err != nil {
+			b.Errorf("Unexpected error: %v", err)
+		}
+	}
+}
+
 func Test_jsonpath_JsonPathLookup_1(t *testing.T) {
 	// key from root
 	res, _ := JsonPathLookup(json_data, "$.expensive")
@@ -850,24 +862,24 @@ var tcase_cmp_any = []map[string]interface{}{
 		"op":   "=~",
 		"exp":  false,
 		"err":  "op should only be <, <=, ==, >= and >",
-	},{
+	}, {
 		"obj1": ifc1,
 		"obj2": ifc1,
 		"op":   "==",
 		"exp":  true,
-		"err": nil,
-	},{
+		"err":  nil,
+	}, {
 		"obj1": ifc2,
 		"obj2": ifc2,
 		"op":   "==",
 		"exp":  true,
-		"err": nil,
-	},{
+		"err":  nil,
+	}, {
 		"obj1": 20,
 		"obj2": "100",
-		"op": ">",
-		"exp": false,
-		"err": nil,
+		"op":   ">",
+		"exp":  false,
+		"err":  nil,
 	},
 }
 
@@ -934,7 +946,6 @@ func Test_jsonpath_string_equal(t *testing.T) {
     },
     "expensive": 10
 }`
-
 
 	var j interface{}
 

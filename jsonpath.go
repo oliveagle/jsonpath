@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"github.com/mohae/utilitybelt/deepcopy"
 	//"golang.org/x/tools/go/types"
+	"errors"
 	"go/token"
 	"go/types"
 	"reflect"
 	"strconv"
 	"strings"
-	"errors"
 )
 
 var ErrGetFromNullObj = errors.New("get attribute from null object")
@@ -283,6 +283,16 @@ func get_key(obj interface{}, key string) (interface{}, error) {
 	}
 	switch reflect.TypeOf(obj).Kind() {
 	case reflect.Map:
+		// if obj came from stdlib json, its highly likely to be a map[string]interface{}
+		// in which case we can save having to iterate the map keys to work out if the
+		// key exists
+		if jsonMap, ok := obj.(map[string]interface{}); ok {
+			val, exists := jsonMap[key]
+			if !exists {
+				return nil, fmt.Errorf("key error: %s not found in object", key)
+			}
+			return val, nil
+		}
 		for _, kv := range reflect.ValueOf(obj).MapKeys() {
 			//fmt.Println(kv.String())
 			if kv.String() == key {
@@ -417,9 +427,12 @@ func parse_filter(filter string) (lp string, op string, rp string, err error) {
 				str_embrace = true
 			} else {
 				switch stage {
-				case 0: lp = tmp
-				case 1: op = tmp
-				case 2: rp = tmp
+				case 0:
+					lp = tmp
+				case 1:
+					op = tmp
+				case 2:
+					rp = tmp
 				}
 				tmp = ""
 			}
@@ -429,9 +442,12 @@ func parse_filter(filter string) (lp string, op string, rp string, err error) {
 				continue
 			}
 			switch stage {
-			case 0: lp = tmp
-			case 1: op = tmp
-			case 2: rp = tmp
+			case 0:
+				lp = tmp
+			case 1:
+				op = tmp
+			case 2:
+				rp = tmp
 			}
 			tmp = ""
 
@@ -448,8 +464,10 @@ func parse_filter(filter string) (lp string, op string, rp string, err error) {
 		case 0:
 			lp = tmp
 			op = "exists"
-		case 1: op = tmp
-		case 2: rp = tmp
+		case 1:
+			op = tmp
+		case 2:
+			rp = tmp
 		}
 		tmp = ""
 	}
@@ -528,11 +546,11 @@ func eval_filter(obj, root interface{}, lp, op, rp string) (res bool, err error)
 
 func isNumber(o interface{}) bool {
 	switch v := o.(type) {
-	case int,int8,int16,int32,int64:
+	case int, int8, int16, int32, int64:
 		return true
-	case uint,uint8,uint16,uint32,uint64:
+	case uint, uint8, uint16, uint32, uint64:
 		return true
-	case float32,float64:
+	case float32, float64:
 		return true
 	case string:
 		_, err := strconv.ParseFloat(v, 64)
