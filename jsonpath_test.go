@@ -994,3 +994,9 @@ func Test_jsonpath_num_cmp(t *testing.T) {
 	}
 
 }
+
+func BenchmarkJsonPathLookup(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		JsonPathLookup(json_data, "$.books[?(@.price > 20)].name")
+	}
+}

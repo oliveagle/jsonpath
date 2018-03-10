@@ -1,10 +1,8 @@
 package jsonpath
 
 import (
-	"fmt"
-	"github.com/mohae/utilitybelt/deepcopy"
-	//"golang.org/x/tools/go/types"
 	"errors"
+	"fmt"
 	"go/token"
 	"go/types"
 	"reflect"
@@ -16,8 +14,6 @@ var ErrGetFromNullObj = errors.New("get attribute from null object")
 
 func JsonPathLookup(obj interface{}, jpath string) (interface{}, error) {
 	steps, err := tokenize(jpath)
-	//fmt.Println("f: steps: ", steps, err)
-	//fmt.Println(jpath, steps)
 	if err != nil {
 		return nil, err
 	}
@@ -25,20 +21,18 @@ func JsonPathLookup(obj interface{}, jpath string) (interface{}, error) {
 		return nil, fmt.Errorf("$ or @ should in front of path")
 	}
 	steps = steps[1:]
-	xobj := deepcopy.Iface(obj)
-	//fmt.Println("f: xobj", xobj)
 	for _, s := range steps {
 		op, key, args, err := parse_token(s)
 		// "key", "idx"
 		switch op {
 		case "key":
-			xobj, err = get_key(xobj, key)
+			obj, err = get_key(obj, key)
 			if err != nil {
 				return nil, err
 			}
 		case "idx":
 			//fmt.Println("idx ----------------1")
-			xobj, err = get_key(xobj, key)
+			obj, err = get_key(obj, key)
 			if err != nil {
 				return nil, err
 			}
@@ -48,16 +42,16 @@ func JsonPathLookup(obj interface{}, jpath string) (interface{}, error) {
 				res := []interface{}{}
 				for _, x := range args.([]int) {
 					//fmt.Println("idx ---- ", x)
-					tmp, err := get_idx(xobj, x)
+					tmp, err := get_idx(obj, x)
 					if err != nil {
 						return nil, err
 					}
 					res = append(res, tmp)
 				}
-				xobj = res
+				obj = res
 			} else if len(args.([]int)) == 1 {
 				//fmt.Println("idx ----------------3")
-				xobj, err = get_idx(xobj, args.([]int)[0])
+				obj, err = get_idx(obj, args.([]int)[0])
 				if err != nil {
 					return nil, err
 				}
@@ -66,12 +60,12 @@ func JsonPathLookup(obj interface{}, jpath string) (interface{}, error) {
 				return nil, fmt.Errorf("cannot index on empty slice")
 			}
 		case "range":
-			xobj, err = get_key(xobj, key)
+			obj, err = get_key(obj, key)
 			if err != nil {
 				return nil, err
 			}
 			if argsv, ok := args.([2]interface{}); ok == true {
-				xobj, err = get_range(xobj, argsv[0], argsv[1])
+				obj, err = get_range(obj, argsv[0], argsv[1])
 				if err != nil {
 					return nil, err
 				}
@@ -79,16 +73,16 @@ func JsonPathLookup(obj interface{}, jpath string) (interface{}, error) {
 				return nil, fmt.Errorf("range args length should be 2")
 			}
 		case "filter":
-			xobj, err = get_key(xobj, key)
+			obj, err = get_key(obj, key)
 			if err != nil {
 				return nil, err
 			}
-			xobj, err = get_filtered(xobj, obj, args.(string))
+			obj, err = get_filtered(obj, obj, args.(string))
 		default:
 			return nil, fmt.Errorf("expression don't support in filter")
 		}
 	}
-	return xobj, nil
+	return obj, nil
 }
 
 func tokenize(query string) ([]string, error) {
