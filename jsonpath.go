@@ -14,34 +14,72 @@ import (
 var ErrGetFromNullObj = errors.New("get attribute from null object")
 
 func JsonPathLookup(obj interface{}, jpath string) (interface{}, error) {
-	steps, err := tokenize(jpath)
+	c, err := Compile(jpath)
 	if err != nil {
 		return nil, err
 	}
-	if steps[0] != "@" && steps[0] != "$" {
+	return c.Lookup(obj)
+}
+
+type Compiled struct {
+	path  string
+	steps []step
+}
+
+type step struct {
+	op   string
+	key  string
+	args interface{}
+}
+
+func Compile(jpath string) (*Compiled, error) {
+	tokens, err := tokenize(jpath)
+	if err != nil {
+		return nil, err
+	}
+	if tokens[0] != "@" && tokens[0] != "$" {
 		return nil, fmt.Errorf("$ or @ should in front of path")
 	}
-	steps = steps[1:]
-	for _, s := range steps {
-		op, key, args, err := parse_token(s)
+	tokens = tokens[1:]
+	res := Compiled{
+		path:  jpath,
+		steps: make([]step, len(tokens)),
+	}
+	for i, token := range tokens {
+		op, key, args, err := parse_token(token)
+		if err != nil {
+			return nil, err
+		}
+		res.steps[i] = step{op, key, args}
+	}
+	return &res, nil
+}
+
+func (c *Compiled) String() string {
+	return fmt.Sprintf("Compiled lookup: %s", c.path)
+}
+
+func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
+	var err error
+	for _, s := range c.steps {
 		// "key", "idx"
-		switch op {
+		switch s.op {
 		case "key":
-			obj, err = get_key(obj, key)
+			obj, err = get_key(obj, s.key)
 			if err != nil {
 				return nil, err
 			}
 		case "idx":
 			//fmt.Println("idx ----------------1")
-			obj, err = get_key(obj, key)
+			obj, err = get_key(obj, s.key)
 			if err != nil {
 				return nil, err
 			}
 
-			if len(args.([]int)) > 1 {
+			if len(s.args.([]int)) > 1 {
 				//fmt.Println("idx ----------------2")
 				res := []interface{}{}
-				for _, x := range args.([]int) {
+				for _, x := range s.args.([]int) {
 					//fmt.Println("idx ---- ", x)
 					tmp, err := get_idx(obj, x)
 					if err != nil {
@@ -50,9 +88,9 @@ func JsonPathLookup(obj interface{}, jpath string) (interface{}, error) {
 					res = append(res, tmp)
 				}
 				obj = res
-			} else if len(args.([]int)) == 1 {
+			} else if len(s.args.([]int)) == 1 {
 				//fmt.Println("idx ----------------3")
-				obj, err = get_idx(obj, args.([]int)[0])
+				obj, err = get_idx(obj, s.args.([]int)[0])
 				if err != nil {
 					return nil, err
 				}
@@ -61,11 +99,11 @@ func JsonPathLookup(obj interface{}, jpath string) (interface{}, error) {
 				return nil, fmt.Errorf("cannot index on empty slice")
 			}
 		case "range":
-			obj, err = get_key(obj, key)
+			obj, err = get_key(obj, s.key)
 			if err != nil {
 				return nil, err
 			}
-			if argsv, ok := args.([2]interface{}); ok == true {
+			if argsv, ok := s.args.([2]interface{}); ok == true {
 				obj, err = get_range(obj, argsv[0], argsv[1])
 				if err != nil {
 					return nil, err
@@ -74,11 +112,11 @@ func JsonPathLookup(obj interface{}, jpath string) (interface{}, error) {
 				return nil, fmt.Errorf("range args length should be 2")
 			}
 		case "filter":
-			obj, err = get_key(obj, key)
+			obj, err = get_key(obj, s.key)
 			if err != nil {
 				return nil, err
 			}
-			obj, err = get_filtered(obj, obj, args.(string))
+			obj, err = get_filtered(obj, obj, s.args.(string))
 			if err != nil {
 				return nil, err
 			}

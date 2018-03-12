@@ -983,6 +983,22 @@ func Test_jsonpath_num_cmp(t *testing.T) {
 
 }
 
+func BenchmarkJsonPathLookupCompiled(b *testing.B) {
+	c, err := Compile("$.store.book[0].price")
+	if err != nil {
+		b.Fatalf("%v", err)
+	}
+	for n := 0; n < b.N; n++ {
+		res, err := c.Lookup(json_data)
+		if res_v, ok := res.(float64); ok != true || res_v != 8.95 {
+			b.Errorf("$.store.book[0].price should be 8.95")
+		}
+		if err != nil {
+			b.Errorf("Unexpected error: %v", err)
+		}
+	}
+}
+
 func BenchmarkJsonPathLookup(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		res, err := JsonPathLookup(json_data, "$.store.book[0].price")
