@@ -28,7 +28,12 @@ import (
 
 var json_data interface{}
 json.Unmarshal([]byte(data), &json_data)
+
 res, err := jsonpath.JsonPathLookup(json_data, "$.expensive")
+
+//or reuse lookup pattern
+pat, _ := jsonpath.Compile(`$.store.book[?(@.price < $.expensive)].price`)
+res, err := pat.Lookup(json_data)
 ```
 
 Operators
