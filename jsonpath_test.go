@@ -527,6 +527,7 @@ func Test_jsonpath_get_range(t *testing.T) {
 	obj := []int{1, 2, 3, 4, 5}
 
 	res, err := get_range(obj, 0, 2)
+	fmt.Println("get range 0 2")
 	fmt.Println(err, res)
 	if err != nil {
 		t.Errorf("failed to get_range: %v", err)
@@ -537,6 +538,7 @@ func Test_jsonpath_get_range(t *testing.T) {
 
 	obj1 := []interface{}{1, 2, 3, 4, 5}
 	res, err = get_range(obj1, 3, -1)
+	fmt.Println("get range 3 -1")
 	fmt.Println(err, res)
 	if err != nil {
 		t.Errorf("failed to get_range: %v", err)
@@ -547,25 +549,32 @@ func Test_jsonpath_get_range(t *testing.T) {
 	}
 
 	res, err = get_range(obj1, nil, 2)
-	t.Logf("err: %v, res:%v", err, res)
+	fmt.Println("get range nil 2")
+	fmt.Printf("err: %v, res:%v", err, res)
+	fmt.Println()
 	if res.([]interface{})[0] != 1 || res.([]interface{})[1] != 2 {
 		t.Errorf("from support nil failed: %v", res)
 	}
 
 	res, err = get_range(obj1, nil, nil)
-	t.Logf("err: %v, res:%v", err, res)
+	fmt.Println("get range nil nil")
+	fmt.Printf("err: %v, res:%v", err, res)
+	fmt.Println()
 	if len(res.([]interface{})) != 5 {
 		t.Errorf("from, to both nil failed")
 	}
 
 	res, err = get_range(obj1, -2, nil)
-	t.Logf("err: %v, res:%v", err, res)
+	fmt.Println("get range -2 nil")
+	fmt.Printf("err: %v, res:%v", err, res)
+	fmt.Println()
 	if res.([]interface{})[0] != 4 || res.([]interface{})[1] != 5 {
 		t.Errorf("from support nil failed: %v", res)
 	}
 
 	obj2 := 2
 	res, err = get_range(obj2, 0, 1)
+	fmt.Println("get range 0 1")
 	fmt.Println(err, res)
 	if err == nil {
 		t.Errorf("object is Slice error not raised")

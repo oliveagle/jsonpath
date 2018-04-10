@@ -70,14 +70,14 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 				return nil, err
 			}
 		case "idx":
-			fmt.Println("idx ----------------1")
+			//fmt.Println("idx ----------------1")
 			obj, err = get_key(obj, s.key)
 			if err != nil {
 				return nil, err
 			}
 
 			if len(s.args.([]int)) > 1 {
-				fmt.Println("idx ----------------2")
+				//fmt.Println("idx ----------------2")
 				res := []interface{}{}
 				for _, x := range s.args.([]int) {
 					//fmt.Println("idx ---- ", x)
@@ -89,13 +89,13 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 				}
 				obj = res
 			} else if len(s.args.([]int)) == 1 {
-				fmt.Println("idx ----------------3")
+				//fmt.Println("idx ----------------3")
 				obj, err = get_idx(obj, s.args.([]int)[0])
 				if err != nil {
 					return nil, err
 				}
 			} else {
-				fmt.Println("idx ----------------4")
+				//fmt.Println("idx ----------------4")
 				return nil, fmt.Errorf("cannot index on empty slice")
 			}
 		case "range":
@@ -133,7 +133,7 @@ func tokenize(query string) ([]string, error) {
 	//	token_end := false
 	token := ""
 
-	fmt.Println("-------------------------------------------------- start")
+	//fmt.Println("-------------------------------------------------- start")
 	for idx, x := range query {
 		token += string(x)
 		// //fmt.Printf("idx: %d, x: %s, token: %s, tokens: %v\n", idx, string(x), token, tokens)
@@ -155,7 +155,7 @@ func tokenize(query string) ([]string, error) {
 			token = "."
 			continue
 		} else {
-			fmt.Println("else: ", string(x), token)
+			//fmt.Println("else: ", string(x), token)
 			if strings.Contains(token, "[") {
 				// fmt.Println(" contains [ ")
 				if x == ']' && !strings.HasSuffix(token, "\\]") {
@@ -168,7 +168,7 @@ func tokenize(query string) ([]string, error) {
 					continue
 				}
 			} else {
-				fmt.Println(" doesn't contains [ ")
+				//fmt.Println(" doesn't contains [ ")
 				if x == '.' {
 					if token[0] == '.' {
 						tokens = append(tokens, token[1:len(token)-1])
@@ -197,8 +197,8 @@ func tokenize(query string) ([]string, error) {
 			}
 		}
 	}
-	fmt.Println("finished tokens: ", tokens)
-	fmt.Println("================================================= done ")
+	//fmt.Println("finished tokens: ", tokens)
+	//fmt.Println("================================================= done ")
 	return tokens, nil
 }
 
@@ -399,7 +399,7 @@ func get_range(obj, frm, to interface{}) (interface{}, error) {
 		if _to < 0 || _to > length {
 			return nil, fmt.Errorf("index [to] out of range: len: %v, to: %v", length, to)
 		}
-		fmt.Println("_frm, _to: ", _frm, _to)
+		//fmt.Println("_frm, _to: ", _frm, _to)
 		res_v := reflect.ValueOf(obj).Slice(_frm, _to)
 		return res_v.Interface(), nil
 	default:
