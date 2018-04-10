@@ -90,6 +90,13 @@ func Test_jsonpath_JsonPathLookup_1(t *testing.T) {
 		}
 	}
 
+	// full array
+	res, err = JsonPathLookup(json_data, "$.store.book[:].price")
+	t.Log(err, res)
+	if res_v, ok := res.([]interface{}); ok != true || res_v[0].(float64) != 8.95 || res_v[1].(float64) != 12.99 || res_v[2].(float64) != 8.99 || res_v[3].(float64) != 22.99 {
+		t.Errorf("exp: [8.95, 12.99, 8.99, 22.99], got: %v", res)
+	}
+
 	// range
 	res, err = JsonPathLookup(json_data, "$.store.book[0:1].price")
 	t.Log(err, res)
@@ -104,6 +111,17 @@ func Test_jsonpath_JsonPathLookup_1(t *testing.T) {
 		if res_v[0].(string) != "Sayings of the Century" || res_v[1].(string) != "Sword of Honour" {
 			t.Errorf("title are wrong: %v", res)
 		}
+	}
+}
+
+func Test_jsonpath_GetSteps(t *testing.T) {
+	c, err := Compile("$.store.book[0].price")
+	if err != nil {
+		t.Errorf("error: %v", err)
+	}
+	steps := c.GetSteps()
+	if steps[0] != "store" || steps[1] != "book" || steps[2] != "price" {
+		t.Errorf("exp: [store book price], got: %v", steps)
 	}
 }
 
