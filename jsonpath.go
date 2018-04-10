@@ -59,6 +59,14 @@ func (c *Compiled) String() string {
 	return fmt.Sprintf("Compiled lookup: %s", c.path)
 }
 
+func (c *Compiled) GetSteps() []string {
+	res := []string{}
+	for _, step := range c.steps {
+		res = append(res, step.key)
+	}
+	return res
+}
+
 func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 	var err error
 	for _, s := range c.steps {

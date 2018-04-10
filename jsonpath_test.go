@@ -114,6 +114,17 @@ func Test_jsonpath_JsonPathLookup_1(t *testing.T) {
 	}
 }
 
+func Test_jsonpath_GetSteps(t *testing.T) {
+	c, err := Compile("$.store.book[0].price")
+	if err != nil {
+		t.Errorf("error: %v", err)
+	}
+	steps := c.GetSteps()
+	if steps[0] != "store" || steps[1] != "book" || steps[2] != "price" {
+		t.Errorf("exp: [store book price], got: %v", steps)
+	}
+}
+
 func Test_jsonpath_JsonPathLookup_filter(t *testing.T) {
 	res, err := JsonPathLookup(json_data, "$.store.book[?(@.isbn)].isbn")
 	t.Log(err, res)
