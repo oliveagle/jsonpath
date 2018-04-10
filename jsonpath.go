@@ -133,7 +133,7 @@ func tokenize(query string) ([]string, error) {
 	//	token_end := false
 	token := ""
 
-	//fmt.Println("-------------------------------------------------- start")
+	// fmt.Println("-------------------------------------------------- start")
 	for idx, x := range query {
 		token += string(x)
 		// //fmt.Printf("idx: %d, x: %s, token: %s, tokens: %v\n", idx, string(x), token, tokens)
@@ -155,7 +155,7 @@ func tokenize(query string) ([]string, error) {
 			token = "."
 			continue
 		} else {
-			//fmt.Println("else: ", string(x), token)
+			// fmt.Println("else: ", string(x), token)
 			if strings.Contains(token, "[") {
 				// fmt.Println(" contains [ ")
 				if x == ']' && !strings.HasSuffix(token, "\\]") {
@@ -168,7 +168,7 @@ func tokenize(query string) ([]string, error) {
 					continue
 				}
 			} else {
-				//fmt.Println(" doesn't contains [ ")
+				// fmt.Println(" doesn't contains [ ")
 				if x == '.' {
 					if token[0] == '.' {
 						tokens = append(tokens, token[1:len(token)-1])
@@ -197,8 +197,8 @@ func tokenize(query string) ([]string, error) {
 			}
 		}
 	}
-	//fmt.Println("finished tokens: ", tokens)
-	//fmt.Println("================================================= done ")
+	// fmt.Println("finished tokens: ", tokens)
+	// fmt.Println("================================================= done ")
 	return tokens, nil
 }
 
