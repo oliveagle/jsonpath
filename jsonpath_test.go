@@ -91,7 +91,7 @@ func Test_jsonpath_JsonPathLookup_1(t *testing.T) {
 	}
 
 	// full array
-	res, err = JsonPathLookup(json_data, "$.store.book[0:].price")
+	res, err = JsonPathLookup(json_data, "$.store.book[:].price")
 	t.Log(err, res)
 	if res_v, ok := res.([]interface{}); ok != true || res_v[0].(float64) != 8.95 || res_v[1].(float64) != 12.99 || res_v[2].(float64) != 8.99 || res_v[3].(float64) != 22.99 {
 		t.Errorf("exp: [8.95, 12.99, 8.99, 22.99], got: %v", res)
@@ -534,7 +534,6 @@ func Test_jsonpath_get_range(t *testing.T) {
 	obj := []int{1, 2, 3, 4, 5}
 
 	res, err := get_range(obj, 0, 2)
-	fmt.Println("get range 0 2")
 	fmt.Println(err, res)
 	if err != nil {
 		t.Errorf("failed to get_range: %v", err)
@@ -545,7 +544,6 @@ func Test_jsonpath_get_range(t *testing.T) {
 
 	obj1 := []interface{}{1, 2, 3, 4, 5}
 	res, err = get_range(obj1, 3, -1)
-	fmt.Println("get range 3 -1")
 	fmt.Println(err, res)
 	if err != nil {
 		t.Errorf("failed to get_range: %v", err)
@@ -556,32 +554,25 @@ func Test_jsonpath_get_range(t *testing.T) {
 	}
 
 	res, err = get_range(obj1, nil, 2)
-	fmt.Println("get range nil 2")
-	fmt.Printf("err: %v, res:%v", err, res)
-	fmt.Println()
+	t.Logf("err: %v, res:%v", err, res)
 	if res.([]interface{})[0] != 1 || res.([]interface{})[1] != 2 {
 		t.Errorf("from support nil failed: %v", res)
 	}
 
 	res, err = get_range(obj1, nil, nil)
-	fmt.Println("get range nil nil")
-	fmt.Printf("err: %v, res:%v", err, res)
-	fmt.Println()
+	t.Logf("err: %v, res:%v", err, res)
 	if len(res.([]interface{})) != 5 {
 		t.Errorf("from, to both nil failed")
 	}
 
 	res, err = get_range(obj1, -2, nil)
-	fmt.Println("get range -2 nil")
-	fmt.Printf("err: %v, res:%v", err, res)
-	fmt.Println()
+	t.Logf("err: %v, res:%v", err, res)
 	if res.([]interface{})[0] != 4 || res.([]interface{})[1] != 5 {
 		t.Errorf("from support nil failed: %v", res)
 	}
 
 	obj2 := 2
 	res, err = get_range(obj2, 0, 1)
-	fmt.Println("get range 0 1")
 	fmt.Println(err, res)
 	if err == nil {
 		t.Errorf("object is Slice error not raised")
