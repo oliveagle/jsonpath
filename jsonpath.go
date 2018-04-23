@@ -71,9 +71,11 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 			}
 		case "idx":
 			//fmt.Println("idx ----------------1")
-			obj, err = get_key(obj, s.key)
-			if err != nil {
-				return nil, err
+			if len(s.key) > 0 {
+				obj, err = get_key(obj, s.key)
+				if err != nil {
+					return nil, err
+				}
 			}
 
 			if len(s.args.([]int)) > 1 {
