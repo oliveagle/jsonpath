@@ -32,6 +32,14 @@ type step struct {
 	args interface{}
 }
 
+func MustCompile(jpath string) *Compiled {
+	c, err := Compile(jpath)
+	if err != nil {
+		panic(err)
+	}
+	return c
+}
+
 func Compile(jpath string) (*Compiled, error) {
 	tokens, err := tokenize(jpath)
 	if err != nil {
