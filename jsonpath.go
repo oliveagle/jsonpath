@@ -254,9 +254,15 @@ func parse_token(token string) (op string, key string, args interface{}, err err
 			var frm interface{}
 			var to interface{}
 			if frm, err = strconv.Atoi(strings.Trim(tails[0], " ")); err != nil {
+				if strings.Trim(tails[0], " ") == "" {
+					err = nil
+				}
 				frm = nil
 			}
 			if to, err = strconv.Atoi(strings.Trim(tails[1], " ")); err != nil {
+				if strings.Trim(tails[1], " ") == "" {
+					err = nil
+				}
 				to = nil
 			}
 			args = [2]interface{}{frm, to}
@@ -389,6 +395,12 @@ func get_range(obj, frm, to interface{}) (interface{}, error) {
 		length := reflect.ValueOf(obj).Len()
 		_frm := 0
 		_to := length
+		if frm == nil {
+			frm = 0
+		}
+		if to == nil {
+			to = length - 1
+		}
 		if fv, ok := frm.(int); ok == true {
 			if fv < 0 {
 				_frm = length + fv
