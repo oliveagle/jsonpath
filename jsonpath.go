@@ -78,8 +78,8 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 				return nil, err
 			}
 		case "idx":
-			//fmt.Println("idx ----------------1")
 			if len(s.key) > 0 {
+				// no key `$[0].test`
 				obj, err = get_key(obj, s.key)
 				if err != nil {
 					return nil, err
@@ -87,7 +87,6 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 			}
 
 			if len(s.args.([]int)) > 1 {
-				//fmt.Println("idx ----------------2")
 				res := []interface{}{}
 				for _, x := range s.args.([]int) {
 					//fmt.Println("idx ---- ", x)
@@ -109,9 +108,12 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 				return nil, fmt.Errorf("cannot index on empty slice")
 			}
 		case "range":
-			obj, err = get_key(obj, s.key)
-			if err != nil {
-				return nil, err
+			if len(s.key) > 0 {
+				// no key `$[:1].test`
+				obj, err = get_key(obj, s.key)
+				if err != nil {
+					return nil, err
+				}
 			}
 			if argsv, ok := s.args.([2]interface{}); ok == true {
 				obj, err = get_range(obj, argsv[0], argsv[1])

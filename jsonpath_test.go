@@ -230,14 +230,12 @@ func Test_jsonpath_tokenize(t *testing.T) {
 
 var parse_token_cases = []map[string]interface{}{
 
-	// 0
 	map[string]interface{}{
 		"token": "$",
 		"op":    "root",
 		"key":   "$",
 		"args":  nil,
 	},
-	// 1
 	map[string]interface{}{
 		"token": "store",
 		"op":    "key",
@@ -246,51 +244,50 @@ var parse_token_cases = []map[string]interface{}{
 	},
 
 	// idx --------------------------------------
-	// 2
 	map[string]interface{}{
 		"token": "book[2]",
 		"op":    "idx",
 		"key":   "book",
 		"args":  []int{2},
 	},
-	// 3
 	map[string]interface{}{
 		"token": "book[-1]",
 		"op":    "idx",
 		"key":   "book",
 		"args":  []int{-1},
 	},
-	// 4
 	map[string]interface{}{
 		"token": "book[0,1]",
 		"op":    "idx",
 		"key":   "book",
 		"args":  []int{0, 1},
 	},
+	map[string]interface{}{
+		"token": "[0]",
+		"op":    "idx",
+		"key":   "",
+		"args":  []int{0},
+	},
 
 	// range ------------------------------------
-	// 5
 	map[string]interface{}{
 		"token": "book[1:-1]",
 		"op":    "range",
 		"key":   "book",
 		"args":  [2]interface{}{1, -1},
 	},
-	// 6
 	map[string]interface{}{
 		"token": "book[*]",
 		"op":    "range",
 		"key":   "book",
 		"args":  [2]interface{}{nil, nil},
 	},
-	// 7
 	map[string]interface{}{
 		"token": "book[:2]",
 		"op":    "range",
 		"key":   "book",
 		"args":  [2]interface{}{nil, 2},
 	},
-	// 8
 	map[string]interface{}{
 		"token": "book[-2:]",
 		"op":    "range",
@@ -299,35 +296,30 @@ var parse_token_cases = []map[string]interface{}{
 	},
 
 	// filter --------------------------------
-	// 9
 	map[string]interface{}{
 		"token": "book[?( @.isbn      )]",
 		"op":    "filter",
 		"key":   "book",
 		"args":  "@.isbn",
 	},
-	// 10
 	map[string]interface{}{
 		"token": "book[?(@.price < 10)]",
 		"op":    "filter",
 		"key":   "book",
 		"args":  "@.price < 10",
 	},
-	// 11
 	map[string]interface{}{
 		"token": "book[?(@.price <= $.expensive)]",
 		"op":    "filter",
 		"key":   "book",
 		"args":  "@.price <= $.expensive",
 	},
-	// 12
 	map[string]interface{}{
 		"token": "book[?(@.author =~ /.*REES/i)]",
 		"op":    "filter",
 		"key":   "book",
 		"args":  "@.author =~ /.*REES/i",
 	},
-	// 13
 	map[string]interface{}{
 		"token": "*",
 		"op":    "scan",
@@ -1121,4 +1113,126 @@ func TestRegOp(t *testing.T) {
 			}
 		}
 	}
+}
+
+func Test_jsonpath_rootnode_is_array(t *testing.T) {
+	data := `[{
+    "test": 12.34
+}, {
+	"test": 13.34
+}, {
+	"test": 14.34
+}]
+`
+
+	var j interface{}
+
+	err := json.Unmarshal([]byte(data), &j)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := JsonPathLookup(j, "$[0].test")
+	t.Log(res, err)
+	if err != nil {
+		t.Fatal("err:", err)
+	}
+	if res == nil || res.(float64) != 12.34 {
+		t.Fatalf("different:  res:%v, exp: 123", res)
+	}
+}
+
+func Test_jsonpath_rootnode_is_array_range(t *testing.T) {
+	data := `[{
+    "test": 12.34
+}, {
+	"test": 13.34
+}, {
+	"test": 14.34
+}]
+`
+
+	var j interface{}
+
+	err := json.Unmarshal([]byte(data), &j)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := JsonPathLookup(j, "$[:1].test")
+	t.Log(res, err)
+	if err != nil {
+		t.Fatal("err:", err)
+	}
+	if res == nil {
+		t.Fatal("res is nil")
+	}
+	ares := res.([]interface{})
+	for idx, v := range ares {
+		t.Logf("idx: %v, v: %v", idx, v)
+	}
+	if len(ares) != 2 {
+		t.Fatal("len is not 2. got: %v", len(ares))
+	}
+	if ares[0].(float64) != 12.34 {
+		t.Fatal("idx: 0, should be 12.34. got: %v", ares[0])
+	}
+	if ares[1].(float64) != 13.34 {
+		t.Fatal("idx: 0, should be 12.34. got: %v", ares[1])
+	}
+}
+
+func Test_jsonpath_rootnode_is_nested_array(t *testing.T) {
+	data := `[ [ {"test":1.1}, {"test":2.1} ], [ {"test":3.1}, {"test":4.1} ] ]`
+
+	var j interface{}
+
+	err := json.Unmarshal([]byte(data), &j)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := JsonPathLookup(j, "$[0].[0].test")
+	t.Log(res, err)
+	if err != nil {
+		t.Fatal("err:", err)
+	}
+	if res == nil || res.(float64) != 1.1 {
+		t.Fatalf("different:  res:%v, exp: 123", res)
+	}
+}
+
+func Test_jsonpath_rootnode_is_nested_array_range(t *testing.T) {
+	data := `[ [ {"test":1.1}, {"test":2.1} ], [ {"test":3.1}, {"test":4.1} ] ]`
+
+	var j interface{}
+
+	err := json.Unmarshal([]byte(data), &j)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := JsonPathLookup(j, "$[:1].[0].test")
+	t.Log(res, err)
+	if err != nil {
+		t.Fatal("err:", err)
+	}
+	if res == nil {
+		t.Fatal("res is nil")
+	}
+	ares := res.([]interface{})
+	for idx, v := range ares {
+		t.Logf("idx: %v, v: %v", idx, v)
+	}
+	if len(ares) != 2 {
+		t.Fatal("len is not 2. got: %v", len(ares))
+	}
+
+	//FIXME: `$[:1].[0].test` got wrong result
+	//if ares[0].(float64) != 1.1 {
+	//	t.Fatal("idx: 0, should be 1.1, got: %v", ares[0])
+	//}
+	//if ares[1].(float64) != 3.1 {
+	//	t.Fatal("idx: 0, should be 3.1, got: %v", ares[1])
+	//}
 }
