@@ -335,7 +335,8 @@ func get_key(obj interface{}, key string) (interface{}, error) {
 	if reflect.TypeOf(obj) == nil {
 		return nil, ErrGetFromNullObj
 	}
-	switch reflect.TypeOf(obj).Kind() {
+	value := reflect.ValueOf(obj)
+	switch value.Kind() {
 	case reflect.Map:
 		// if obj came from stdlib json, its highly likely to be a map[string]interface{}
 		// in which case we can save having to iterate the map keys to work out if the
@@ -347,23 +348,70 @@ func get_key(obj interface{}, key string) (interface{}, error) {
 			}
 			return val, nil
 		}
-		for _, kv := range reflect.ValueOf(obj).MapKeys() {
+		for _, kv := range value.MapKeys() {
 			//fmt.Println(kv.String())
 			if kv.String() == key {
-				return reflect.ValueOf(obj).MapIndex(kv).Interface(), nil
+				return value.MapIndex(kv).Interface(), nil
 			}
 		}
 		return nil, fmt.Errorf("key error: %s not found in object", key)
 	case reflect.Slice:
 		// slice we should get from all objects in it.
 		res := []interface{}{}
-		for i := 0; i < reflect.ValueOf(obj).Len(); i++ {
+		for i := 0; i < value.Len(); i++ {
 			tmp, _ := get_idx(obj, i)
 			if v, err := get_key(tmp, key); err == nil {
 				res = append(res, v)
 			}
 		}
 		return res, nil
+	case reflect.Ptr:
+		// Unwrap pointer
+		realValue := value.Elem()
+
+		if !realValue.IsValid() {
+			return nil, fmt.Errorf("null pointer")
+		}
+
+		return get_key(realValue.Interface(), key)
+	case reflect.Interface:
+		// Unwrap interface value
+		realValue := value.Elem()
+
+		return get_key(realValue.Interface(), key)
+	case reflect.Struct:
+		for i := 0; i < value.NumField(); i++ {
+			valueField := value.Field(i)
+			structField := value.Type().Field(i)
+
+			// Embeded struct
+			if valueField.Kind() == reflect.Struct && structField.Anonymous {
+				v, _ := get_key(valueField.Interface(), key)
+				if v != nil {
+					return v, nil
+				}
+			} else {
+				if structField.Name == key {
+					return valueField.Interface(), nil
+				}
+
+				if tag, ok := structField.Tag.Lookup("json"); ok {
+					values := strings.Split(tag, ",")
+					for _, tagValue := range values {
+						// In the following cases json tag names should not be checked:
+						// ",omitempty", "-", "-,"
+						if (tagValue == "" && len(values) == 2) || tagValue == "-" {
+							break
+						}
+						if tagValue != "omitempty" && tagValue == key {
+							return valueField.Interface(), nil
+						}
+					}
+				}
+			}
+		}
+
+		return nil, fmt.Errorf("key error: %s not found in struct", key)
 	default:
 		return nil, fmt.Errorf("object is not map")
 	}
