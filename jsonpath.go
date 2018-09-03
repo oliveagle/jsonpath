@@ -395,7 +395,7 @@ func get_key(obj interface{}, key string) (interface{}, error) {
 					return valueField.Interface(), nil
 				}
 
-				if tag, ok := structField.Tag.Lookup("json"); ok {
+				if tag := structField.Tag.Get("json"); tag != "" {
 					values := strings.Split(tag, ",")
 					for _, tagValue := range values {
 						// In the following cases json tag names should not be checked:
