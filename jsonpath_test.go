@@ -96,7 +96,7 @@ func Test_jsonpath_JsonPathLookup_1(t *testing.T) {
 	if res_v, ok := res.([]interface{}); ok != true || res_v[0].(float64) != 8.95 || res_v[1].(float64) != 12.99 || res_v[2].(float64) != 8.99 || res_v[3].(float64) != 22.99 {
 		t.Errorf("exp: [8.95, 12.99, 8.99, 22.99], got: %v", res)
 	}
-	
+
 	// range
 	res, err = JsonPathLookup(json_data, "$.store.book[0:1].price")
 	t.Log(err, res)
@@ -453,7 +453,10 @@ func Test_jsonpath_get_key(t *testing.T) {
 		},
 	}
 	res, err = get_key(obj4, "a")
-	fmt.Println(err, res)
+	if res_v, ok := res.([]interface{}); ok != true || len(res_v) != 2 || res_v[0] != 1 || res_v[1] != 2 {
+		fmt.Println(err, res)
+		t.Errorf("[]map[string]interface{} support failed")
+	}
 }
 
 func Test_jsonpath_get_idx(t *testing.T) {
@@ -1179,13 +1182,13 @@ func Test_jsonpath_rootnode_is_array_range(t *testing.T) {
 		t.Logf("idx: %v, v: %v", idx, v)
 	}
 	if len(ares) != 2 {
-		t.Fatal("len is not 2. got: %v", len(ares))
+		t.Fatalf("len is not 2. got: %v", len(ares))
 	}
 	if ares[0].(float64) != 12.34 {
-		t.Fatal("idx: 0, should be 12.34. got: %v", ares[0])
+		t.Fatalf("idx: 0, should be 12.34. got: %v", ares[0])
 	}
 	if ares[1].(float64) != 13.34 {
-		t.Fatal("idx: 0, should be 12.34. got: %v", ares[1])
+		t.Fatalf("idx: 0, should be 12.34. got: %v", ares[1])
 	}
 }
 
@@ -1232,7 +1235,7 @@ func Test_jsonpath_rootnode_is_nested_array_range(t *testing.T) {
 		t.Logf("idx: %v, v: %v", idx, v)
 	}
 	if len(ares) != 2 {
-		t.Fatal("len is not 2. got: %v", len(ares))
+		t.Fatalf("len is not 2. got: %v", len(ares))
 	}
 
 	//FIXME: `$[:1].[0].test` got wrong result
@@ -1242,4 +1245,72 @@ func Test_jsonpath_rootnode_is_nested_array_range(t *testing.T) {
 	//if ares[1].(float64) != 3.1 {
 	//	t.Fatal("idx: 0, should be 3.1, got: %v", ares[1])
 	//}
+}
+
+func Test_root_array(t *testing.T) {
+	var (
+		err   error
+		books = []map[string]interface{}{
+			map[string]interface{}{
+				"category": "reference",
+				"meta": map[string]interface{}{
+					"language":            "en",
+					"release_year":        1984,
+					"available_for_order": false,
+				},
+				"author": "Nigel Rees",
+				"title":  "Sayings of the Century",
+				"price":  8.95,
+			},
+			map[string]interface{}{
+				"category": "fiction",
+				"meta": map[string]interface{}{
+					"language":           "en",
+					"release_year":       2012,
+					"availabe_for_order": true,
+				},
+				"author": "Evelyn Waugh",
+				"title":  "Sword of Honour",
+				"price":  12.99,
+			},
+			map[string]interface{}{
+				"category": "fiction",
+				"meta":     nil,
+				"author":   "Herman Melville",
+				"title":    "Moby Dick",
+				"isbn":     "0-553-21311-3",
+				"price":    8.99,
+			},
+		}
+	)
+
+	res, err := JsonPathLookup(books, "$[?(@.meta.language == 'en')]")
+	if res_v, ok := res.([]interface{}); err != nil || ok == false || len(res_v) != 2 {
+		fmt.Println(res, err)
+		t.Error("root array support is broken")
+	}
+
+	res2, err := JsonPathLookup(books, "$[?(@.meta)]")
+	if res_v, ok := res2.([]interface{}); err != nil || ok == false || len(res_v) != 2 {
+		fmt.Println(res2, err)
+		t.Error("root array support broken")
+	}
+
+	res3, err := JsonPathLookup(books, "$[-1]")
+	if res_v, ok := res3.(map[string]interface{}); err != nil || ok == false || len(res_v) != 6 || res_v["meta"] != nil {
+		fmt.Println(res3, err)
+		t.Error("root array support broken")
+	}
+
+	res4, err := JsonPathLookup(books, "$[*]")
+	if res_v, ok := res4.([]map[string]interface{}); err != nil || ok == false || len(res_v) != 3 {
+		fmt.Println(res4, err)
+		t.Error("root array support broken")
+	}
+
+	res5, err := JsonPathLookup(books, "$[?(@.meta.language == 'en')].meta.release_year")
+	if res_v, ok := res5.([]interface{}); err != nil || ok == false || len(res_v) != 2 {
+		fmt.Println(res5, err)
+		t.Error("root array support is broken")
+	}
 }

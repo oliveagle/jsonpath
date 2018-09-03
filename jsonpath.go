@@ -359,8 +359,12 @@ func get_key(obj interface{}, key string) (interface{}, error) {
 		res := []interface{}{}
 		for i := 0; i < reflect.ValueOf(obj).Len(); i++ {
 			tmp, _ := get_idx(obj, i)
-			if v, err := get_key(tmp, key); err == nil {
-				res = append(res, v)
+			if key == "" {
+				res = append(res, tmp)
+			} else {
+				if v, err := get_key(tmp, key); err == nil {
+					res = append(res, v)
+				}
 			}
 		}
 		return res, nil
