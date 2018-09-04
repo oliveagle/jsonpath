@@ -10,7 +10,46 @@ import (
 	"testing"
 )
 
-var json_data interface{}
+type Data struct {
+	Store     *Store  `json:"store"`
+	Expensive float64 `json:"expensive"`
+}
+
+type Store struct {
+	Book    []Goods `json:"book"`
+	Bicycle []Goods `json:"bicycle"`
+}
+
+type Goods interface {
+	GetPrice() float64
+}
+
+type Book struct {
+	Category string   `json:"category,omitempty"`
+	Author   string   `json:"author"`
+	Title    string   `json:"title"`
+	Price    float64  `json:"price"`
+	ISBN     string   `json:"isbn"`
+	Tags     []string `json:"-"`
+}
+
+func (b *Book) GetPrice() float64 {
+	return b.Price
+}
+
+type Bicycle struct {
+	Color string `json:"colour"`
+	Price float64
+}
+
+func (b *Bicycle) GetPrice() float64 {
+	return b.Price
+}
+
+var (
+	json_data  interface{}
+	structData *Data
+)
 
 func init() {
 	data := `
@@ -53,6 +92,51 @@ func init() {
 }
 `
 	json.Unmarshal([]byte(data), &json_data)
+
+	structData = &Data{
+		Store: &Store{
+			Book: []Goods{
+				&Book{
+					Category: "reference",
+					Author:   "Nigel Rees",
+					Title:    "Sayings of the Century",
+					Price:    8.95,
+				},
+				&Book{
+					Category: "fiction",
+					Author:   "Evelyn Waugh",
+					Title:    "Sword of Honour",
+					Price:    12.99,
+					Tags:     []string{"fiction", "best-seller", "best-deal"},
+				},
+				&Book{
+					Category: "fiction",
+					Author:   "Herman Melville",
+					Title:    "Moby Dick",
+					ISBN:     "0-553-21311-3",
+					Price:    8.99,
+				},
+				&Book{
+					Category: "fiction",
+					Author:   "J. R. R. Tolkien",
+					Title:    "The Lord of the Rings",
+					ISBN:     "0-395-19395-8",
+					Price:    22.99,
+				},
+			},
+			Bicycle: []Goods{
+				&Bicycle{
+					Color: "red",
+					Price: 19.95,
+				},
+				&Bicycle{
+					Color: "brown",
+					Price: 9.99,
+				},
+			},
+		},
+		Expensive: 10,
+	}
 }
 
 func Test_jsonpath_JsonPathLookup_1(t *testing.T) {
@@ -65,7 +149,7 @@ func Test_jsonpath_JsonPathLookup_1(t *testing.T) {
 	// single index
 	res, _ = JsonPathLookup(json_data, "$.store.book[0].price")
 	if res_v, ok := res.(float64); ok != true || res_v != 8.95 {
-		t.Errorf("$.store.book[0].price should be 8.95")
+		t.Errorf("$.store.book[0].price should be 8.95, received: %v", res)
 	}
 
 	// nagtive single index
@@ -96,7 +180,7 @@ func Test_jsonpath_JsonPathLookup_1(t *testing.T) {
 	if res_v, ok := res.([]interface{}); ok != true || res_v[0].(float64) != 8.95 || res_v[1].(float64) != 12.99 || res_v[2].(float64) != 8.99 || res_v[3].(float64) != 22.99 {
 		t.Errorf("exp: [8.95, 12.99, 8.99, 22.99], got: %v", res)
 	}
-	
+
 	// range
 	res, err = JsonPathLookup(json_data, "$.store.book[0:1].price")
 	t.Log(err, res)
@@ -106,6 +190,65 @@ func Test_jsonpath_JsonPathLookup_1(t *testing.T) {
 
 	// range
 	res, err = JsonPathLookup(json_data, "$.store.book[0:1].title")
+	t.Log(err, res)
+	if res_v, ok := res.([]interface{}); ok != true {
+		if res_v[0].(string) != "Sayings of the Century" || res_v[1].(string) != "Sword of Honour" {
+			t.Errorf("title are wrong: %v", res)
+		}
+	}
+}
+
+func Test_jsonpath_JsonPathLookup_structs_1(t *testing.T) {
+	// key from root
+	res, _ := JsonPathLookup(structData, "$.expensive")
+	if res_v, ok := res.(float64); ok != true || res_v != 10.0 {
+		t.Errorf("expensive should be 10")
+	}
+
+	// single index
+	res, _ = JsonPathLookup(structData, "$.store.book[0].price")
+	if res_v, ok := res.(float64); ok != true || res_v != 8.95 {
+		t.Errorf("$.store.book[0].price should be 8.95, received: %v", res)
+	}
+
+	// nagtive single index
+	res, _ = JsonPathLookup(structData, "$.store.book[-1].isbn")
+	if res_v, ok := res.(string); ok != true || res_v != "0-395-19395-8" {
+		t.Errorf("$.store.book[-1].isbn should be \"0-395-19395-8\", received: %v", res)
+	}
+
+	// multiple index
+	res, err := JsonPathLookup(structData, "$.store.book[0,1].price")
+	t.Log(err, res)
+	if res_v, ok := res.([]interface{}); ok != true || res_v[0].(float64) != 8.95 || res_v[1].(float64) != 12.99 {
+		t.Errorf("exp: [8.95, 12.99], got: %v", res)
+	}
+
+	// multiple index
+	res, err = JsonPathLookup(structData, "$.store.book[0,1].title")
+	t.Log(err, res)
+	if res_v, ok := res.([]interface{}); ok != true {
+		if res_v[0].(string) != "Sayings of the Century" || res_v[1].(string) != "Sword of Honour" {
+			t.Errorf("title are wrong: %v", res)
+		}
+	}
+
+	// full array
+	res, err = JsonPathLookup(structData, "$.store.book[0:].price")
+	t.Log(err, res)
+	if res_v, ok := res.([]interface{}); ok != true || res_v[0].(float64) != 8.95 || res_v[1].(float64) != 12.99 || res_v[2].(float64) != 8.99 || res_v[3].(float64) != 22.99 {
+		t.Errorf("exp: [8.95, 12.99, 8.99, 22.99], got: %v", res)
+	}
+
+	// range
+	res, err = JsonPathLookup(structData, "$.store.book[0:1].price")
+	t.Log(err, res)
+	if res_v, ok := res.([]interface{}); ok != true || res_v[0].(float64) != 8.95 || res_v[1].(float64) != 12.99 {
+		t.Errorf("exp: [8.95, 12.99], got: %v", res)
+	}
+
+	// range
+	res, err = JsonPathLookup(structData, "$.store.book[0:1].title")
 	t.Log(err, res)
 	if res_v, ok := res.([]interface{}); ok != true {
 		if res_v[0].(string) != "Sayings of the Century" || res_v[1].(string) != "Sword of Honour" {
@@ -124,7 +267,7 @@ func Test_jsonpath_JsonPathLookup_filter(t *testing.T) {
 		}
 	}
 
-	res, err = JsonPathLookup(json_data, "$.store.book[?(@.price > 10)].title")
+	res, err = JsonPathLookup(json_data, "$.store.book[?(@.price > 10)].Title")
 	t.Log(err, res)
 	if res_v, ok := res.([]interface{}); ok != true {
 		if res_v[0].(string) != "Sword of Honour" || res_v[1].(string) != "The Lord of the Rings" {
@@ -173,6 +316,17 @@ func Test_jsonpath_JsonPathLookup_filter(t *testing.T) {
 			if prices[0] != 8.95 || prices[1] != 8.99 {
 				t.Errorf("expected result: [8.95, 8.99] but received: %v", prices)
 			}
+		}
+	}
+}
+
+func Test_jsonpath_JsonPathLookup_struct_filter(t *testing.T) {
+	res, err := JsonPathLookup(structData, "$.store.book[?(@.isbn)].ISBN")
+	t.Log(err, res)
+
+	if res_v, ok := res.([]interface{}); ok != true {
+		if res_v[0].(string) != "0-553-21311-3" || res_v[1].(string) != "0-395-19395-8" {
+			t.Errorf("error: %v", res)
 		}
 	}
 }
@@ -490,6 +644,45 @@ func Test_jsonpath_get_key(t *testing.T) {
 	}
 	res, err = get_key(obj4, "a")
 	fmt.Println(err, res)
+}
+
+func Test_jsonpath_get_key_struct(t *testing.T) {
+	res, err := get_key(structData, "Store")
+	fmt.Println(err, res)
+	if err != nil {
+		t.Errorf("failed to get struct key: %v", err)
+		return
+	}
+	if res_v, ok := res.(*Store); !ok || len(res_v.Bicycle) != 2 || len(res_v.Book) != 4 {
+		t.Error("get field of struct failed")
+		return
+	}
+
+	res, err = get_key(structData, "hah")
+	if err == nil {
+		t.Error("failed to raise missing key error")
+		return
+	}
+
+	res, err = get_key(structData, "store")
+	if err != nil {
+		t.Errorf("failed to get struct key: %v", err)
+		return
+	}
+	if res_v, ok := res.(*Store); !ok || len(res_v.Bicycle) != 2 || len(res_v.Book) != 4 {
+		t.Error("get field of struct by json tag name failed")
+		return
+	}
+
+	res, err = get_key(structData.Store.Book[0], "Category")
+	if err != nil {
+		t.Errorf("failed to get field of struct masked by interface: %v", err)
+		return
+	}
+	if res.(string) != "reference" {
+		t.Errorf("not expected value returned: %v", res)
+		return
+	}
 }
 
 func Test_jsonpath_get_idx(t *testing.T) {
@@ -1215,13 +1408,13 @@ func Test_jsonpath_rootnode_is_array_range(t *testing.T) {
 		t.Logf("idx: %v, v: %v", idx, v)
 	}
 	if len(ares) != 2 {
-		t.Fatal("len is not 2. got: %v", len(ares))
+		t.Fatalf("len is not 2. got: %v", len(ares))
 	}
 	if ares[0].(float64) != 12.34 {
-		t.Fatal("idx: 0, should be 12.34. got: %v", ares[0])
+		t.Fatalf("idx: 0, should be 12.34. got: %v", ares[0])
 	}
 	if ares[1].(float64) != 13.34 {
-		t.Fatal("idx: 0, should be 12.34. got: %v", ares[1])
+		t.Fatalf("idx: 0, should be 12.34. got: %v", ares[1])
 	}
 }
 
@@ -1268,7 +1461,7 @@ func Test_jsonpath_rootnode_is_nested_array_range(t *testing.T) {
 		t.Logf("idx: %v, v: %v", idx, v)
 	}
 	if len(ares) != 2 {
-		t.Fatal("len is not 2. got: %v", len(ares))
+		t.Fatalf("len is not 2. got: %v", len(ares))
 	}
 
 	//FIXME: `$[:1].[0].test` got wrong result
