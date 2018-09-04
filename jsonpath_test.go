@@ -329,6 +329,58 @@ func Test_jsonpath_JsonPathLookup_struct_filter(t *testing.T) {
 			t.Errorf("error: %v", res)
 		}
 	}
+
+	res, err = JsonPathLookup(structData, "$.store.book[?(@.price > 10)].title")
+	t.Log(err, res)
+	if res_v, ok := res.([]interface{}); ok != true {
+		if res_v[0].(string) != "Sword of Honour" || res_v[1].(string) != "The Lord of the Rings" {
+			t.Errorf("error: %v", res)
+		}
+	}
+
+	res, err = JsonPathLookup(structData, "$.store.book[?(@.price > 10)]")
+	t.Log(err, res)
+	if res_v, ok := res.([]interface{}); ok != true {
+		t.Errorf("expected: []interface{}, received: %v", res)
+	} else {
+		if len(res_v) != 2 {
+			t.Errorf("length of result should be 2, but actual length is %d: %v", len(res_v), res_v)
+		} else {
+			prices := []*Book{res_v[0].(*Book), res_v[1].(*Book)}
+			if prices[0].Price != 12.99 || prices[1].Price != 22.99 {
+				t.Errorf("expected book prices: [12.99, 22.99] but received: %v, result: %v", prices, res_v)
+			}
+		}
+	}
+
+	res, err = JsonPathLookup(structData, "$.store.book[?(@.price > $.expensive)].price")
+	t.Log(err, res)
+	if res_v, ok := res.([]interface{}); ok != true {
+		t.Errorf("expected: []interface{}, received: %v", res)
+	} else {
+		if len(res_v) != 2 {
+			t.Errorf("length of result should be 2, but actual length is %d: %v", len(res_v), res_v)
+		} else {
+			if res_v[0].(float64) != 12.99 || res_v[1].(float64) != 22.99 {
+				t.Errorf("expected result: [12.99, 22.99] but received: %v", res_v)
+			}
+		}
+	}
+
+	res, err = JsonPathLookup(structData, "$.store.book[?(@.price < $.expensive)].price")
+	t.Log(err, res)
+	if res_v, ok := res.([]interface{}); ok != true {
+		t.Errorf("expected: []Goods, received: %v", res)
+	} else {
+		if len(res_v) != 2 {
+			t.Errorf("length of result should be 2, but actual length is %d: %v", len(res_v), res_v)
+		} else {
+			prices := []float64{res_v[0].(float64), res_v[1].(float64)}
+			if prices[0] != 8.95 || prices[1] != 8.99 {
+				t.Errorf("expected result: [8.95, 8.99] but received: %v", prices)
+			}
+		}
+	}
 }
 
 func Test_jsonpath_authors_of_all_books(t *testing.T) {
