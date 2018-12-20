@@ -347,10 +347,14 @@ func get_key(obj interface{}, key string) (interface{}, error) {
 			}
 			return val, nil
 		}
-		for _, kv := range reflect.ValueOf(obj).MapKeys() {
-			//fmt.Println(kv.String())
+		of := reflect.ValueOf(obj)
+		for _, kv := range of.MapKeys() {
+			// obj is map[interface{}]interface{}, but the key is string
+			if kv.Interface() == key {
+				return of.MapIndex(kv).Interface(), nil
+			}
 			if kv.String() == key {
-				return reflect.ValueOf(obj).MapIndex(kv).Interface(), nil
+				return of.MapIndex(kv).Interface(), nil
 			}
 		}
 		return nil, fmt.Errorf("key error: %s not found in object", key)
