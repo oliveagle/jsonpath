@@ -96,7 +96,7 @@ func Test_jsonpath_JsonPathLookup_1(t *testing.T) {
 	if res_v, ok := res.([]interface{}); ok != true || res_v[0].(float64) != 8.95 || res_v[1].(float64) != 12.99 || res_v[2].(float64) != 8.99 || res_v[3].(float64) != 22.99 {
 		t.Errorf("exp: [8.95, 12.99, 8.99, 22.99], got: %v", res)
 	}
-	
+
 	// range
 	res, err = JsonPathLookup(json_data, "$.store.book[0:1].price")
 	t.Log(err, res)
