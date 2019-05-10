@@ -465,7 +465,11 @@ func get_filtered(obj, root interface{}, filter string) ([]interface{}, error) {
 				tmp := reflect.ValueOf(obj).Index(i).Interface()
 				ok, err := eval_reg_filter(tmp, root, lp, pat)
 				if err != nil {
-					return nil, err
+					if strings.ContainsAny(err.Error(), "key error: & not found in object") {
+						continue
+					} else {
+						return nil, err
+					}
 				}
 				if ok == true {
 					res = append(res, tmp)
