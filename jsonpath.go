@@ -251,12 +251,14 @@ func parse_token(token string) (op string, key string, args interface{}, err err
 		tail = tail[1 : len(tail)-1]
 
 		//fmt.Println(key, tail)
-		if strings.Contains(tail, "?") {
+		if strings.HasPrefix(tail, "?") {
 			// filter -------------------------------------------------
 			op = "filter"
-			if strings.HasPrefix(tail, "?(") && strings.HasSuffix(tail, ")") {
-				args = strings.Trim(tail[2:len(tail)-1], " ")
+			if !strings.HasPrefix(tail, "?(") || !strings.HasSuffix(tail, ")") {
+				err = fmt.Errorf("filter expression needs to be enclosed in parentheses: %v", tail)
+				return
 			}
+			args = strings.Trim(tail[2:len(tail)-1], " ")
 			return
 		} else if strings.Contains(tail, ":") {
 			// range ----------------------------------------------
