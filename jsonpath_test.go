@@ -318,6 +318,37 @@ func Test_jsonpath_JsonPathLookup_filter(t *testing.T) {
 			}
 		}
 	}
+
+	res, err = JsonPathLookup(json_data, "$.store.book[?@.isbn)]")
+	t.Log(err, res)
+	if _, ok := res.([]interface{}); ok == true {
+		t.Errorf("expected: error, received: %v", res)
+	}
+
+	res, err = JsonPathLookup(json_data, "$.store.book[?(@.isbn]")
+	t.Log(err, res)
+	if _, ok := res.([]interface{}); ok == true {
+		t.Errorf("expected: error, received: %v", res)
+	}
+
+	res, err = JsonPathLookup(json_data, "$.store.book[?@.isbn]")
+	t.Log(err, res)
+	if _, ok := res.([]interface{}); ok == true {
+		t.Errorf("expected: error, received: %v", res)
+	}
+
+	res, err = JsonPathLookup(json_data, "$.store.book[? (@.isbn)]")
+	t.Log(err, res)
+	if _, ok := res.([]interface{}); ok == true {
+		t.Errorf("expected: error, received: %v", res)
+	}
+
+	res, err = JsonPathLookup(json_data, "$.store.book[ ?(@.isbn)]")
+	t.Log(err, res)
+	if _, ok := res.([]interface{}); ok == true {
+		t.Errorf("expected: error, received: %v", res)
+	}
+
 }
 
 func Test_jsonpath_JsonPathLookup_struct_filter(t *testing.T) {
@@ -381,6 +412,37 @@ func Test_jsonpath_JsonPathLookup_struct_filter(t *testing.T) {
 			}
 		}
 	}
+
+	res, err = JsonPathLookup(structData, "$.store.book[?@.isbn)]")
+	t.Log(err, res)
+	if _, ok := res.([]interface{}); ok == true {
+		t.Errorf("expected: error, received: %v", res)
+	}
+
+	res, err = JsonPathLookup(structData, "$.store.book[?(@.isbn]")
+	t.Log(err, res)
+	if _, ok := res.([]interface{}); ok == true {
+		t.Errorf("expected: error, received: %v", res)
+	}
+
+	res, err = JsonPathLookup(structData, "$.store.book[?@.isbn]")
+	t.Log(err, res)
+	if _, ok := res.([]interface{}); ok == true {
+		t.Errorf("expected: error, received: %v", res)
+	}
+
+	res, err = JsonPathLookup(structData, "$.store.book[? (@.isbn)]")
+	t.Log(err, res)
+	if _, ok := res.([]interface{}); ok == true {
+		t.Errorf("expected: error, received: %v", res)
+	}
+
+	res, err = JsonPathLookup(structData, "$.store.book[ ?(@.isbn)]")
+	t.Log(err, res)
+	if _, ok := res.([]interface{}); ok == true {
+		t.Errorf("expected: error, received: %v", res)
+	}
+
 }
 
 func Test_jsonpath_authors_of_all_books(t *testing.T) {
