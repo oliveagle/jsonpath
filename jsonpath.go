@@ -68,7 +68,11 @@ func (c *Compiled) String() string {
 }
 
 func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
-	var err error
+	var (
+		err  error
+		root = obj
+	)
+
 	for _, s := range c.steps {
 		// "key", "idx"
 		switch s.op {
@@ -128,7 +132,7 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 			if err != nil {
 				return nil, err
 			}
-			obj, err = get_filtered(obj, obj, s.args.(string))
+			obj, err = get_filtered(obj, root, s.args.(string))
 			if err != nil {
 				return nil, err
 			}
@@ -144,6 +148,7 @@ func tokenize(query string) ([]string, error) {
 	//	token_start := false
 	//	token_end := false
 	token := ""
+	open := 0
 
 	// fmt.Println("-------------------------------------------------- start")
 	for idx, x := range query {
@@ -171,13 +176,21 @@ func tokenize(query string) ([]string, error) {
 			if strings.Contains(token, "[") {
 				// fmt.Println(" contains [ ")
 				if x == ']' && !strings.HasSuffix(token, "\\]") {
-					if token[0] == '.' {
-						tokens = append(tokens, token[1:])
-					} else {
-						tokens = append(tokens, token[:])
+					open--
+
+					if open == 0 {
+						if token[0] == '.' {
+							tokens = append(tokens, token[1:])
+						} else {
+							tokens = append(tokens, token[:])
+						}
+						token = ""
 					}
-					token = ""
 					continue
+				}
+
+				if x == '[' && !strings.HasSuffix(token, "\\[") {
+					open++
 				}
 			} else {
 				// fmt.Println(" doesn't contains [ ")
@@ -238,12 +251,14 @@ func parse_token(token string) (op string, key string, args interface{}, err err
 		tail = tail[1 : len(tail)-1]
 
 		//fmt.Println(key, tail)
-		if strings.Contains(tail, "?") {
+		if strings.HasPrefix(tail, "?") {
 			// filter -------------------------------------------------
 			op = "filter"
-			if strings.HasPrefix(tail, "?(") && strings.HasSuffix(tail, ")") {
-				args = strings.Trim(tail[2:len(tail)-1], " ")
+			if !strings.HasPrefix(tail, "?(") || !strings.HasSuffix(tail, ")") {
+				err = fmt.Errorf("filter expression needs to be enclosed in parentheses: %v", tail)
+				return
 			}
+			args = strings.Trim(tail[2:len(tail)-1], " ")
 			return
 		} else if strings.Contains(tail, ":") {
 			// range ----------------------------------------------
@@ -335,7 +350,8 @@ func get_key(obj interface{}, key string) (interface{}, error) {
 	if reflect.TypeOf(obj) == nil {
 		return nil, ErrGetFromNullObj
 	}
-	switch reflect.TypeOf(obj).Kind() {
+	value := reflect.ValueOf(obj)
+	switch value.Kind() {
 	case reflect.Map:
 		// if obj came from stdlib json, its highly likely to be a map[string]interface{}
 		// in which case we can save having to iterate the map keys to work out if the
@@ -347,23 +363,74 @@ func get_key(obj interface{}, key string) (interface{}, error) {
 			}
 			return val, nil
 		}
-		for _, kv := range reflect.ValueOf(obj).MapKeys() {
+		for _, kv := range value.MapKeys() {
 			//fmt.Println(kv.String())
 			if kv.String() == key {
-				return reflect.ValueOf(obj).MapIndex(kv).Interface(), nil
+				return value.MapIndex(kv).Interface(), nil
 			}
 		}
 		return nil, fmt.Errorf("key error: %s not found in object", key)
 	case reflect.Slice:
 		// slice we should get from all objects in it.
 		res := []interface{}{}
-		for i := 0; i < reflect.ValueOf(obj).Len(); i++ {
+		for i := 0; i < value.Len(); i++ {
 			tmp, _ := get_idx(obj, i)
-			if v, err := get_key(tmp, key); err == nil {
-				res = append(res, v)
+			if key == "" {
+				res = append(res, tmp)
+			} else {
+				if v, err := get_key(tmp, key); err == nil {
+					res = append(res, v)
+				}
 			}
 		}
 		return res, nil
+	case reflect.Ptr:
+		// Unwrap pointer
+		realValue := value.Elem()
+
+		if !realValue.IsValid() {
+			return nil, fmt.Errorf("null pointer")
+		}
+
+		return get_key(realValue.Interface(), key)
+	case reflect.Interface:
+		// Unwrap interface value
+		realValue := value.Elem()
+
+		return get_key(realValue.Interface(), key)
+	case reflect.Struct:
+		for i := 0; i < value.NumField(); i++ {
+			valueField := value.Field(i)
+			structField := value.Type().Field(i)
+
+			// Embeded struct
+			if valueField.Kind() == reflect.Struct && structField.Anonymous {
+				v, _ := get_key(valueField.Interface(), key)
+				if v != nil {
+					return v, nil
+				}
+			} else {
+				if structField.Name == key {
+					return valueField.Interface(), nil
+				}
+
+				if tag := structField.Tag.Get("json"); tag != "" {
+					values := strings.Split(tag, ",")
+					for _, tagValue := range values {
+						// In the following cases json tag names should not be checked:
+						// ",omitempty", "-", "-,"
+						if (tagValue == "" && len(values) == 2) || tagValue == "-" {
+							break
+						}
+						if tagValue != "omitempty" && tagValue == key {
+							return valueField.Interface(), nil
+						}
+					}
+				}
+			}
+		}
+
+		return nil, fmt.Errorf("key error: %s not found in struct", key)
 	default:
 		return nil, fmt.Errorf("object is not map")
 	}
@@ -663,7 +730,7 @@ func eval_filter(obj, root interface{}, lp, op, rp string) (res bool, err error)
 		var rp_v interface{}
 		if strings.HasPrefix(rp, "@.") {
 			rp_v, err = filter_get_from_explicit_path(obj, rp)
-		} else if strings.HasPrefix(rp, "$.") {
+		} else if strings.HasPrefix(rp, "$.") || strings.HasPrefix(rp, "$[") {
 			rp_v, err = filter_get_from_explicit_path(root, rp)
 		} else {
 			rp_v = rp
