@@ -144,9 +144,27 @@ func tokenize(query string) ([]string, error) {
 	//	token_start := false
 	//	token_end := false
 	token := ""
+	quoteChar := rune(0)
 
 	// fmt.Println("-------------------------------------------------- start")
 	for idx, x := range query {
+		if quoteChar != 0 {
+			if x == quoteChar {
+				quoteChar = 0
+			} else {
+				token += string(x)
+			}
+
+			continue
+		} else if x == '"' {
+			if token == "." {
+				token = ""
+			}
+
+			quoteChar = x
+			continue
+		}
+
 		token += string(x)
 		// //fmt.Printf("idx: %d, x: %s, token: %s, tokens: %v\n", idx, string(x), token, tokens)
 		if idx == 0 {
@@ -193,6 +211,11 @@ func tokenize(query string) ([]string, error) {
 			}
 		}
 	}
+
+	if quoteChar != 0 {
+		token = string(quoteChar) + token
+	}
+
 	if len(token) > 0 {
 		if token[0] == '.' {
 			token = token[1:]

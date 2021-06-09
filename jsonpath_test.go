@@ -8,6 +8,8 @@ import (
 	"reflect"
 	"regexp"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 var json_data interface{}
@@ -66,6 +68,12 @@ func Test_jsonpath_JsonPathLookup_1(t *testing.T) {
 	res, _ = JsonPathLookup(json_data, "$.store.book[0].price")
 	if res_v, ok := res.(float64); ok != true || res_v != 8.95 {
 		t.Errorf("$.store.book[0].price should be 8.95")
+	}
+
+	// quoted - single index
+	res, _ = JsonPathLookup(json_data, `$."store"."book"[0]."price"`)
+	if res_v, ok := res.(float64); ok != true || res_v != 8.95 {
+		t.Errorf(`$."store"."book"[0]."price" should be 8.95`)
 	}
 
 	// nagtive single index
@@ -153,90 +161,42 @@ func Test_jsonpath_authors_of_all_books(t *testing.T) {
 	t.Log(res, expected)
 }
 
-var token_cases = []map[string]interface{}{
-	map[string]interface{}{
-		"query":  "$..author",
-		"tokens": []string{"$", "*", "author"},
-	},
-	map[string]interface{}{
-		"query":  "$.store.*",
-		"tokens": []string{"$", "store", "*"},
-	},
-	map[string]interface{}{
-		"query":  "$.store..price",
-		"tokens": []string{"$", "store", "*", "price"},
-	},
-	map[string]interface{}{
-		"query":  "$.store.book[*].author",
-		"tokens": []string{"$", "store", "book[*]", "author"},
-	},
-	map[string]interface{}{
-		"query":  "$..book[2]",
-		"tokens": []string{"$", "*", "book[2]"},
-	},
-	map[string]interface{}{
-		"query":  "$..book[(@.length-1)]",
-		"tokens": []string{"$", "*", "book[(@.length-1)]"},
-	},
-	map[string]interface{}{
-		"query":  "$..book[0,1]",
-		"tokens": []string{"$", "*", "book[0,1]"},
-	},
-	map[string]interface{}{
-		"query":  "$..book[:2]",
-		"tokens": []string{"$", "*", "book[:2]"},
-	},
-	map[string]interface{}{
-		"query":  "$..book[?(@.isbn)]",
-		"tokens": []string{"$", "*", "book[?(@.isbn)]"},
-	},
-	map[string]interface{}{
-		"query":  "$.store.book[?(@.price < 10)]",
-		"tokens": []string{"$", "store", "book[?(@.price < 10)]"},
-	},
-	map[string]interface{}{
-		"query":  "$..book[?(@.price <= $.expensive)]",
-		"tokens": []string{"$", "*", "book[?(@.price <= $.expensive)]"},
-	},
-	map[string]interface{}{
-		"query":  "$..book[?(@.author =~ /.*REES/i)]",
-		"tokens": []string{"$", "*", "book[?(@.author =~ /.*REES/i)]"},
-	},
-	map[string]interface{}{
-		"query":  "$..book[?(@.author =~ /.*REES\\]/i)]",
-		"tokens": []string{"$", "*", "book[?(@.author =~ /.*REES\\]/i)]"},
-	},
-	map[string]interface{}{
-		"query":  "$..*",
-		"tokens": []string{"$", "*"},
-	},
-	map[string]interface{}{
-		"query":  "$....author",
-		"tokens": []string{"$", "*", "author"},
-	},
+var token_cases = []struct {
+	query    string
+	expected []string
+}{
+	{"$..author", []string{"$", "*", "author"}},
+	{"$.store.*", []string{"$", "store", "*"}},
+	{"$.store..price", []string{"$", "store", "*", "price"}},
+	{"$.store.book[*].author", []string{"$", "store", "book[*]", "author"}},
+	{"$..book[2]", []string{"$", "*", "book[2]"}},
+	{"$..book[(@.length-1)]", []string{"$", "*", "book[(@.length-1)]"}},
+	{"$..book[0,1]", []string{"$", "*", "book[0,1]"}},
+	{"$..book[:2]", []string{"$", "*", "book[:2]"}},
+	{"$..book[?(@.isbn)]", []string{"$", "*", "book[?(@.isbn)]"}},
+	{"$.store.book[?(@.price < 10)]", []string{"$", "store", "book[?(@.price < 10)]"}},
+	{"$..book[?(@.price <= $.expensive)]", []string{"$", "*", "book[?(@.price <= $.expensive)]"}},
+	{"$..book[?(@.author =~ /.*REES/i)]", []string{"$", "*", "book[?(@.author =~ /.*REES/i)]"}},
+	{"$..book[?(@.author =~ /.*REES\\]/i)]", []string{"$", "*", "book[?(@.author =~ /.*REES\\]/i)]"}},
+	{"$..*", []string{"$", "*"}},
+	{"$....author", []string{"$", "*", "author"}},
+	{`$."col"`, []string{"$", "col"}},
+	{`$."col.with.dots"."sub.with.dots"`, []string{"$", "col.with.dots", "sub.with.dots"}},
+	{`$."unterminated`, []string{"$", `"unterminated`}},
+	{`$."col with spaces"."sub with spaces"`, []string{"$", "col with spaces", "sub with spaces"}},
 }
 
 func Test_jsonpath_tokenize(t *testing.T) {
-	for idx, tcase := range token_cases {
-		t.Logf("idx[%d], tcase: %v", idx, tcase)
-		query := tcase["query"].(string)
-		expected_tokens := tcase["tokens"].([]string)
-		tokens, err := tokenize(query)
-		t.Log(err, tokens, expected_tokens)
-		if len(tokens) != len(expected_tokens) {
-			t.Errorf("different length: (got)%v, (expected)%v", len(tokens), len(expected_tokens))
-			continue
-		}
-		for i := 0; i < len(expected_tokens); i++ {
-			if tokens[i] != expected_tokens[i] {
-				t.Errorf("not expected: [%d], (got)%v != (expected)%v", i, tokens[i], expected_tokens[i])
-			}
-		}
+	for _, tcase := range token_cases {
+		t.Run(tcase.query, func(t *testing.T) {
+			tokens, err := tokenize(tcase.query)
+			assert.NoError(t, err)
+			assert.Equal(t, tcase.expected, tokens)
+		})
 	}
 }
 
 var parse_token_cases = []map[string]interface{}{
-
 	map[string]interface{}{
 		"token": "$",
 		"op":    "root",
@@ -1179,13 +1139,13 @@ func Test_jsonpath_rootnode_is_array_range(t *testing.T) {
 		t.Logf("idx: %v, v: %v", idx, v)
 	}
 	if len(ares) != 2 {
-		t.Fatal("len is not 2. got: %v", len(ares))
+		t.Fatalf("len is not 2. got: %v", len(ares))
 	}
 	if ares[0].(float64) != 12.34 {
-		t.Fatal("idx: 0, should be 12.34. got: %v", ares[0])
+		t.Fatalf("idx: 0, should be 12.34. got: %v", ares[0])
 	}
 	if ares[1].(float64) != 13.34 {
-		t.Fatal("idx: 0, should be 12.34. got: %v", ares[1])
+		t.Fatalf("idx: 0, should be 12.34. got: %v", ares[1])
 	}
 }
 
@@ -1232,7 +1192,7 @@ func Test_jsonpath_rootnode_is_nested_array_range(t *testing.T) {
 		t.Logf("idx: %v, v: %v", idx, v)
 	}
 	if len(ares) != 2 {
-		t.Fatal("len is not 2. got: %v", len(ares))
+		t.Fatalf("len is not 2. got: %v", len(ares))
 	}
 
 	//FIXME: `$[:1].[0].test` got wrong result
