@@ -86,7 +86,7 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 				}
 			}
 			if obj == nil {
-				return nil, fmt.Errorf("obj is nil")
+				return nil, nil
 			}
 
 			if len(s.args.([]int)) > 1 {
@@ -119,7 +119,7 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 				}
 			}
 			if obj == nil {
-				return nil, fmt.Errorf("obj is nil")
+				return nil, nil
 			}
 			if argsv, ok := s.args.([2]interface{}); ok == true {
 				obj, err = get_range(obj, argsv[0], argsv[1])
