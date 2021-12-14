@@ -85,11 +85,13 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 					return nil, err
 				}
 			}
-
+			if obj == nil {
+				return nil, nil
+			}
 			if len(s.args.([]int)) > 1 {
 				res := []interface{}{}
 				for _, x := range s.args.([]int) {
-					//fmt.Println("idx ---- ", x)
+					// fmt.Println("idx ---- ", x)
 					tmp, err := get_idx(obj, x)
 					if err != nil {
 						return nil, err
@@ -98,13 +100,13 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 				}
 				obj = res
 			} else if len(s.args.([]int)) == 1 {
-				//fmt.Println("idx ----------------3")
+				// fmt.Println("idx ----------------3")
 				obj, err = get_idx(obj, s.args.([]int)[0])
 				if err != nil {
 					return nil, err
 				}
 			} else {
-				//fmt.Println("idx ----------------4")
+				// fmt.Println("idx ----------------4")
 				return nil, fmt.Errorf("cannot index on empty slice")
 			}
 		case "range":
@@ -114,6 +116,9 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 				if err != nil {
 					return nil, err
 				}
+			}
+			if obj == nil {
+				return nil, nil
 			}
 			if argsv, ok := s.args.([2]interface{}); ok == true {
 				obj, err = get_range(obj, argsv[0], argsv[1])
@@ -237,7 +242,7 @@ func parse_token(token string) (op string, key string, args interface{}, err err
 		}
 		tail = tail[1 : len(tail)-1]
 
-		//fmt.Println(key, tail)
+		// fmt.Println(key, tail)
 		if strings.Contains(tail, "?") {
 			// filter -------------------------------------------------
 			op = "filter"
@@ -292,8 +297,8 @@ func parse_token(token string) (op string, key string, args interface{}, err err
 
 func filter_get_from_explicit_path(obj interface{}, path string) (interface{}, error) {
 	steps, err := tokenize(path)
-	//fmt.Println("f: steps: ", steps, err)
-	//fmt.Println(path, steps)
+	// fmt.Println("f: steps: ", steps, err)
+	// fmt.Println(path, steps)
 	if err != nil {
 		return nil, err
 	}
@@ -302,7 +307,7 @@ func filter_get_from_explicit_path(obj interface{}, path string) (interface{}, e
 	}
 	steps = steps[1:]
 	xobj := obj
-	//fmt.Println("f: xobj", xobj)
+	// fmt.Println("f: xobj", xobj)
 	for _, s := range steps {
 		op, key, args, err := parse_token(s)
 		// "key", "idx"
@@ -343,17 +348,17 @@ func get_key(obj interface{}, key string) (interface{}, error) {
 		if jsonMap, ok := obj.(map[string]interface{}); ok {
 			val, exists := jsonMap[key]
 			if !exists {
-				return nil, fmt.Errorf("key error: %s not found in object", key)
+				return nil, nil
 			}
 			return val, nil
 		}
 		for _, kv := range reflect.ValueOf(obj).MapKeys() {
-			//fmt.Println(kv.String())
+			// fmt.Println(kv.String())
 			if kv.String() == key {
 				return reflect.ValueOf(obj).MapIndex(kv).Interface(), nil
 			}
 		}
-		return nil, fmt.Errorf("key error: %s not found in object", key)
+		return nil, nil
 	case reflect.Slice:
 		// slice we should get from all objects in it.
 		res := []interface{}{}
@@ -423,7 +428,7 @@ func get_range(obj, frm, to interface{}) (interface{}, error) {
 		if _to < 0 || _to > length {
 			return nil, fmt.Errorf("index [to] out of range: len: %v, to: %v", length, to)
 		}
-		//fmt.Println("_frm, _to: ", _frm, _to)
+		// fmt.Println("_frm, _to: ", _frm, _to)
 		res_v := reflect.ValueOf(obj).Slice(_frm, _to)
 		return res_v.Interface(), nil
 	default:
@@ -668,7 +673,7 @@ func eval_filter(obj, root interface{}, lp, op, rp string) (res bool, err error)
 		} else {
 			rp_v = rp
 		}
-		//fmt.Printf("lp_v: %v, rp_v: %v\n", lp_v, rp_v)
+		// fmt.Printf("lp_v: %v, rp_v: %v\n", lp_v, rp_v)
 		return cmp_any(lp_v, rp_v, op)
 	}
 }
@@ -705,7 +710,7 @@ func cmp_any(obj1, obj2 interface{}, op string) (bool, error) {
 	} else {
 		exp = fmt.Sprintf(`"%v" %s "%v"`, obj1, op, obj2)
 	}
-	//fmt.Println("exp: ", exp)
+	// fmt.Println("exp: ", exp)
 	fset := token.NewFileSet()
 	res, err := types.Eval(fset, nil, 0, exp)
 	if err != nil {

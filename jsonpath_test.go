@@ -49,7 +49,8 @@ func init() {
             "price": 19.95
         }
     },
-    "expensive": 10
+    "expensive": 10,
+	"null_array": null
 }
 `
 	json.Unmarshal([]byte(data), &json_data)
@@ -60,6 +61,17 @@ func Test_jsonpath_JsonPathLookup_1(t *testing.T) {
 	res, _ := JsonPathLookup(json_data, "$.expensive")
 	if res_v, ok := res.(float64); ok != true || res_v != 10.0 {
 		t.Errorf("expensive should be 10")
+	}
+
+	res, err := JsonPathLookup(json_data, "$.nulls_array[*].key")
+	if err != nil || res != nil {
+		t.Errorf("expensive shoul")
+	}
+
+	// not found key
+	res, err = JsonPathLookup(json_data, "$.not_exist_key")
+	if err != nil || res != nil {
+		t.Errorf("expensive shoul")
 	}
 
 	// single index
@@ -75,7 +87,7 @@ func Test_jsonpath_JsonPathLookup_1(t *testing.T) {
 	}
 
 	// multiple index
-	res, err := JsonPathLookup(json_data, "$.store.book[0,1].price")
+	res, err = JsonPathLookup(json_data, "$.store.book[0,1].price")
 	t.Log(err, res)
 	if res_v, ok := res.([]interface{}); ok != true || res_v[0].(float64) != 8.95 || res_v[1].(float64) != 12.99 {
 		t.Errorf("exp: [8.95, 12.99], got: %v", res)
@@ -96,7 +108,7 @@ func Test_jsonpath_JsonPathLookup_1(t *testing.T) {
 	if res_v, ok := res.([]interface{}); ok != true || res_v[0].(float64) != 8.95 || res_v[1].(float64) != 12.99 || res_v[2].(float64) != 8.99 || res_v[3].(float64) != 22.99 {
 		t.Errorf("exp: [8.95, 12.99, 8.99, 22.99], got: %v", res)
 	}
-	
+
 	// range
 	res, err = JsonPathLookup(json_data, "$.store.book[0:1].price")
 	t.Log(err, res)
@@ -420,8 +432,8 @@ func Test_jsonpath_get_key(t *testing.T) {
 
 	res, err = get_key(obj, "hah")
 	fmt.Println(err, res)
-	if err == nil {
-		t.Errorf("key error not raised")
+	if err != nil {
+		t.Errorf("key error should not raised")
 		return
 	}
 	if res != nil {
@@ -621,8 +633,7 @@ var tcase_parse_filter = []map[string]interface{}{
 }
 
 func Test_jsonpath_parse_filter(t *testing.T) {
-
-	//for _, tcase := range tcase_parse_filter[4:] {
+	// for _, tcase := range tcase_parse_filter[4:] {
 	for _, tcase := range tcase_parse_filter {
 		lp, op, rp, _ := parse_filter(tcase["filter"].(string))
 		t.Log(tcase)
@@ -683,7 +694,6 @@ var tcase_filter_get_from_explicit_path = []map[string]interface{}{
 }
 
 func Test_jsonpath_filter_get_from_explicit_path(t *testing.T) {
-
 	for idx, tcase := range tcase_filter_get_from_explicit_path {
 		obj := tcase["obj"]
 		query := tcase["query"].(string)
@@ -790,7 +800,6 @@ func Test_jsonpath_eval_filter(t *testing.T) {
 		exp := tcase["exp"].(bool)
 		t.Logf("idx: %v, lp: %v, op: %v, rp: %v, exp: %v", idx, lp, op, rp, exp)
 		got, err := eval_filter(obj, root, lp, op, rp)
-
 		if err != nil {
 			t.Errorf("idx: %v, failed to eval: %v", idx, err)
 			return
@@ -806,6 +815,7 @@ var (
 	ifc1 interface{} = "haha"
 	ifc2 interface{} = "ha ha"
 )
+
 var tcase_cmp_any = []map[string]interface{}{
 
 	map[string]interface{}{
@@ -849,19 +859,22 @@ var tcase_cmp_any = []map[string]interface{}{
 		"op":   "=~",
 		"exp":  false,
 		"err":  "op should only be <, <=, ==, >= and >",
-	}, {
+	},
+	{
 		"obj1": ifc1,
 		"obj2": ifc1,
 		"op":   "==",
 		"exp":  true,
 		"err":  nil,
-	}, {
+	},
+	{
 		"obj1": ifc2,
 		"obj2": ifc2,
 		"op":   "==",
 		"exp":  true,
 		"err":  nil,
-	}, {
+	},
+	{
 		"obj1": 20,
 		"obj2": "100",
 		"op":   ">",
@@ -872,7 +885,7 @@ var tcase_cmp_any = []map[string]interface{}{
 
 func Test_jsonpath_cmp_any(t *testing.T) {
 	for idx, tcase := range tcase_cmp_any {
-		//for idx, tcase := range tcase_cmp_any[8:] {
+		// for idx, tcase := range tcase_cmp_any[8:] {
 		t.Logf("idx: %v, %v %v %v, exp: %v", idx, tcase["obj1"], tcase["op"], tcase["obj2"], tcase["exp"])
 		res, err := cmp_any(tcase["obj1"], tcase["obj2"], tcase["op"].(string))
 		exp := tcase["exp"].(bool)
@@ -979,7 +992,6 @@ func Test_jsonpath_num_cmp(t *testing.T) {
 	if len(arr) != 0 {
 		t.Fatal("should return [], got: ", arr)
 	}
-
 }
 
 func BenchmarkJsonPathLookupCompiled(b *testing.B) {
@@ -1179,13 +1191,13 @@ func Test_jsonpath_rootnode_is_array_range(t *testing.T) {
 		t.Logf("idx: %v, v: %v", idx, v)
 	}
 	if len(ares) != 2 {
-		t.Fatal("len is not 2. got: %v", len(ares))
+		t.Fatalf("len is not 2. got: %v", len(ares))
 	}
 	if ares[0].(float64) != 12.34 {
-		t.Fatal("idx: 0, should be 12.34. got: %v", ares[0])
+		t.Fatalf("idx: 0, should be 12.34. got: %v", ares[0])
 	}
 	if ares[1].(float64) != 13.34 {
-		t.Fatal("idx: 0, should be 12.34. got: %v", ares[1])
+		t.Fatalf("idx: 0, should be 12.34. got: %v", ares[1])
 	}
 }
 
@@ -1232,7 +1244,7 @@ func Test_jsonpath_rootnode_is_nested_array_range(t *testing.T) {
 		t.Logf("idx: %v, v: %v", idx, v)
 	}
 	if len(ares) != 2 {
-		t.Fatal("len is not 2. got: %v", len(ares))
+		t.Fatalf("len is not 2. got: %v", len(ares))
 	}
 
 	//FIXME: `$[:1].[0].test` got wrong result
