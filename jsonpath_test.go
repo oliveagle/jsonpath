@@ -50,7 +50,8 @@ func init() {
         }
     },
     "expensive": 10,
-	"null_array": null
+	"null_array": null,
+	"empty_array": []
 }
 `
 	json.Unmarshal([]byte(data), &json_data)
@@ -65,13 +66,18 @@ func Test_jsonpath_JsonPathLookup_1(t *testing.T) {
 
 	res, err := JsonPathLookup(json_data, "$.nulls_array[*].key")
 	if err != nil || res != nil {
-		t.Errorf("expensive shoul")
+		t.Errorf("nulls_array[*].key should be nil")
+	}
+
+	res, err = JsonPathLookup(json_data, "$.empty_array[*].key")
+	if err != nil || res != nil {
+		t.Errorf("empty_array[*].key should be nil")
 	}
 
 	// not found key
 	res, err = JsonPathLookup(json_data, "$.not_exist_key")
 	if err != nil || res != nil {
-		t.Errorf("expensive shoul")
+		t.Errorf("not_exist_key should be nil")
 	}
 
 	// single index

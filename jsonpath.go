@@ -91,7 +91,6 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 			if len(s.args.([]int)) > 1 {
 				res := []interface{}{}
 				for _, x := range s.args.([]int) {
-					// fmt.Println("idx ---- ", x)
 					tmp, err := get_idx(obj, x)
 					if err != nil {
 						return nil, err
@@ -100,13 +99,11 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 				}
 				obj = res
 			} else if len(s.args.([]int)) == 1 {
-				// fmt.Println("idx ----------------3")
 				obj, err = get_idx(obj, s.args.([]int)[0])
 				if err != nil {
 					return nil, err
 				}
 			} else {
-				// fmt.Println("idx ----------------4")
 				return nil, fmt.Errorf("cannot index on empty slice")
 			}
 		case "range":
@@ -120,7 +117,8 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 			if obj == nil {
 				return nil, nil
 			}
-			if argsv, ok := s.args.([2]interface{}); ok == true {
+
+			if argsv, ok := s.args.([2]interface{}); ok {
 				obj, err = get_range(obj, argsv[0], argsv[1])
 				if err != nil {
 					return nil, err
@@ -172,9 +170,7 @@ func tokenize(query string) ([]string, error) {
 			token = "."
 			continue
 		} else {
-			// fmt.Println("else: ", string(x), token)
 			if strings.Contains(token, "[") {
-				// fmt.Println(" contains [ ")
 				if x == ']' && !strings.HasSuffix(token, "\\]") {
 					if token[0] == '.' {
 						tokens = append(tokens, token[1:])
@@ -185,7 +181,6 @@ func tokenize(query string) ([]string, error) {
 					continue
 				}
 			} else {
-				// fmt.Println(" doesn't contains [ ")
 				if x == '.' {
 					if token[0] == '.' {
 						tokens = append(tokens, token[1:len(token)-1])
@@ -214,8 +209,6 @@ func tokenize(query string) ([]string, error) {
 			}
 		}
 	}
-	// fmt.Println("finished tokens: ", tokens)
-	// fmt.Println("================================================= done ")
 	return tokens, nil
 }
 
@@ -242,7 +235,6 @@ func parse_token(token string) (op string, key string, args interface{}, err err
 		}
 		tail = tail[1 : len(tail)-1]
 
-		// fmt.Println(key, tail)
 		if strings.Contains(tail, "?") {
 			// filter -------------------------------------------------
 			op = "filter"
@@ -297,8 +289,6 @@ func parse_token(token string) (op string, key string, args interface{}, err err
 
 func filter_get_from_explicit_path(obj interface{}, path string) (interface{}, error) {
 	steps, err := tokenize(path)
-	// fmt.Println("f: steps: ", steps, err)
-	// fmt.Println(path, steps)
 	if err != nil {
 		return nil, err
 	}
@@ -307,7 +297,6 @@ func filter_get_from_explicit_path(obj interface{}, path string) (interface{}, e
 	}
 	steps = steps[1:]
 	xobj := obj
-	// fmt.Println("f: xobj", xobj)
 	for _, s := range steps {
 		op, key, args, err := parse_token(s)
 		// "key", "idx"
@@ -338,7 +327,7 @@ func filter_get_from_explicit_path(obj interface{}, path string) (interface{}, e
 
 func get_key(obj interface{}, key string) (interface{}, error) {
 	if reflect.TypeOf(obj) == nil {
-		return nil, ErrGetFromNullObj
+		return nil, nil
 	}
 	switch reflect.TypeOf(obj).Kind() {
 	case reflect.Map:
@@ -400,6 +389,10 @@ func get_range(obj, frm, to interface{}) (interface{}, error) {
 	switch reflect.TypeOf(obj).Kind() {
 	case reflect.Slice:
 		length := reflect.ValueOf(obj).Len()
+		// if length of slice is 0 return nil instead of out of range error
+		if length == 0 {
+			return nil, nil
+		}
 		_frm := 0
 		_to := length
 		if frm == nil {
