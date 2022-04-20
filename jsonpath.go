@@ -354,6 +354,14 @@ func get_key(obj interface{}, key string) (interface{}, error) {
 		for i := 0; i < reflect.ValueOf(obj).Len(); i++ {
 			tmp, _ := get_idx(obj, i)
 			if v, err := get_key(tmp, key); err == nil {
+				keyVal := reflect.ValueOf(v)
+				// flatten the value if the result is array or slice
+				if keyVal.Kind() == reflect.Slice {
+					for j := 0; j < keyVal.Len(); j++ {
+						res = append(res, keyVal.Index(j).Interface())
+					}
+					continue
+				}
 				res = append(res, v)
 			}
 		}
