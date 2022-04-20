@@ -109,7 +109,7 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 		case "range":
 			if len(s.key) > 0 {
 				// no key `$[:1].test`
-				obj, err = get_key_with_flatening(obj, s.key, true)
+				obj, err = get_key_with_flattening(obj, s.key, true)
 				if err != nil {
 					return nil, err
 				}
@@ -127,7 +127,7 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 				return nil, fmt.Errorf("range args length should be 2")
 			}
 		case "filter":
-			obj, err = get_key_with_flatening(obj, s.key, true)
+			obj, err = get_key_with_flattening(obj, s.key, true)
 			if err != nil {
 				return nil, err
 			}
@@ -325,7 +325,7 @@ func filter_get_from_explicit_path(obj interface{}, path string) (interface{}, e
 	return xobj, nil
 }
 
-func get_key_with_flatening(obj interface{}, key string, isFlaten bool) (interface{}, error) {
+func get_key_with_flattening(obj interface{}, key string, isFlatten bool) (interface{}, error) {
 	if reflect.TypeOf(obj) == nil {
 		return nil, nil
 	}
@@ -356,7 +356,7 @@ func get_key_with_flatening(obj interface{}, key string, isFlaten bool) (interfa
 			if v, err := get_key(tmp, key); err == nil {
 				keyVal := reflect.ValueOf(v)
 				// flatten the value is the result is array or slice
-				if keyVal.Kind() == reflect.Slice && isFlaten {
+				if keyVal.Kind() == reflect.Slice && isFlatten {
 					for j := 0; j < keyVal.Len(); j++ {
 						res = append(res, keyVal.Index(j).Interface())
 					}
@@ -372,7 +372,7 @@ func get_key_with_flatening(obj interface{}, key string, isFlaten bool) (interfa
 }
 
 func get_key(obj interface{}, key string) (interface{}, error) {
-	return get_key_with_flatening(obj, key, false)
+	return get_key_with_flattening(obj, key, false)
 }
 
 func get_idx(obj interface{}, idx int) (interface{}, error) {
