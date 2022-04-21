@@ -595,45 +595,6 @@ func parse_filter(filter string) (lp string, op string, rp string, err error) {
 	return lp, op, rp, err
 }
 
-func parse_filter_v1(filter string) (lp string, op string, rp string, err error) {
-	tmp := ""
-	istoken := false
-	for _, c := range filter {
-		if istoken == false && c != ' ' {
-			istoken = true
-		}
-		if istoken == true && c == ' ' {
-			istoken = false
-		}
-		if istoken == true {
-			tmp += string(c)
-		}
-		if istoken == false && tmp != "" {
-			if lp == "" {
-				lp = tmp[:]
-				tmp = ""
-			} else if op == "" {
-				op = tmp[:]
-				tmp = ""
-			} else if rp == "" {
-				rp = tmp[:]
-				tmp = ""
-			}
-		}
-	}
-	if tmp != "" && lp == "" && op == "" && rp == "" {
-		lp = tmp[:]
-		op = "exists"
-		rp = ""
-		err = nil
-		return
-	} else if tmp != "" && rp == "" {
-		rp = tmp[:]
-		tmp = ""
-	}
-	return lp, op, rp, err
-}
-
 func eval_reg_filter(obj, root interface{}, lp string, pat *regexp.Regexp) (res bool, err error) {
 	if pat == nil {
 		return false, errors.New("nil pat")
