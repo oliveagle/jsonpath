@@ -7,7 +7,7 @@ A golang implementation of JsonPath syntax.
 follow the majority rules in http://goessner.net/articles/JsonPath/
 but also with some minor differences.
 
-this library is till bleeding edge, so use it at your own risk. :D
+This library is forked from https://github.com/oliveagle/jsonpath with additional bugfixes and features.
 
 **Golang Version Required**: 1.5+
 
@@ -15,7 +15,7 @@ Get Started
 ------------
 
 ```bash
-go get github.com/oliveagle/jsonpath
+go get github.com/gojekfarm/jsonpath
 ```
 
 example code:

@@ -13,6 +13,7 @@ import (
 
 var ErrGetFromNullObj = errors.New("get attribute from null object")
 
+// JosnPathLookup compile a jsonpath `jpath` and perform lookup on `obj`
 func JsonPathLookup(obj interface{}, jpath string) (interface{}, error) {
 	c, err := Compile(jpath)
 	if err != nil {
@@ -21,6 +22,7 @@ func JsonPathLookup(obj interface{}, jpath string) (interface{}, error) {
 	return c.Lookup(obj)
 }
 
+// Compiled is a compiled jsonpath representation
 type Compiled struct {
 	path  string
 	steps []step
@@ -32,6 +34,7 @@ type step struct {
 	args interface{}
 }
 
+// MustCompile will compile a json path `jpath` and panic if compilation failed
 func MustCompile(jpath string) *Compiled {
 	c, err := Compile(jpath)
 	if err != nil {
@@ -40,6 +43,7 @@ func MustCompile(jpath string) *Compiled {
 	return c
 }
 
+// Compile compile a jsonpath `jpath` and return the compiled version of the jsonpath or error
 func Compile(jpath string) (*Compiled, error) {
 	tokens, err := tokenize(jpath)
 	if err != nil {
@@ -63,10 +67,12 @@ func Compile(jpath string) (*Compiled, error) {
 	return &res, nil
 }
 
+// String return string representation of the compiled jsonpath
 func (c *Compiled) String() string {
 	return fmt.Sprintf("Compiled lookup: %s", c.path)
 }
 
+// Lookup perform lookup using the compiled jsonpath on json `obj`
 func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 	var err error
 	for _, s := range c.steps {
