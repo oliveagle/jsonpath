@@ -109,7 +109,7 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 		case "range":
 			if len(s.key) > 0 {
 				// no key `$[:1].test`
-				obj, err = get_key(obj, s.key)
+				obj, err = get_key_with_flattening(obj, s.key, true)
 				if err != nil {
 					return nil, err
 				}
@@ -127,7 +127,7 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 				return nil, fmt.Errorf("range args length should be 2")
 			}
 		case "filter":
-			obj, err = get_key(obj, s.key)
+			obj, err = get_key_with_flattening(obj, s.key, true)
 			if err != nil {
 				return nil, err
 			}
@@ -325,7 +325,7 @@ func filter_get_from_explicit_path(obj interface{}, path string) (interface{}, e
 	return xobj, nil
 }
 
-func get_key(obj interface{}, key string) (interface{}, error) {
+func get_key_with_flattening(obj interface{}, key string, isFlatten bool) (interface{}, error) {
 	if reflect.TypeOf(obj) == nil {
 		return nil, nil
 	}
@@ -354,6 +354,14 @@ func get_key(obj interface{}, key string) (interface{}, error) {
 		for i := 0; i < reflect.ValueOf(obj).Len(); i++ {
 			tmp, _ := get_idx(obj, i)
 			if v, err := get_key(tmp, key); err == nil {
+				keyVal := reflect.ValueOf(v)
+				// flatten the value is the result is array or slice
+				if keyVal.Kind() == reflect.Slice && isFlatten {
+					for j := 0; j < keyVal.Len(); j++ {
+						res = append(res, keyVal.Index(j).Interface())
+					}
+					continue
+				}
 				res = append(res, v)
 			}
 		}
@@ -361,6 +369,10 @@ func get_key(obj interface{}, key string) (interface{}, error) {
 	default:
 		return nil, fmt.Errorf("object is not map")
 	}
+}
+
+func get_key(obj interface{}, key string) (interface{}, error) {
+	return get_key_with_flattening(obj, key, false)
 }
 
 func get_idx(obj interface{}, idx int) (interface{}, error) {
@@ -578,45 +590,6 @@ func parse_filter(filter string) (lp string, op string, rp string, err error) {
 		case 2:
 			rp = tmp
 		}
-		tmp = ""
-	}
-	return lp, op, rp, err
-}
-
-func parse_filter_v1(filter string) (lp string, op string, rp string, err error) {
-	tmp := ""
-	istoken := false
-	for _, c := range filter {
-		if istoken == false && c != ' ' {
-			istoken = true
-		}
-		if istoken == true && c == ' ' {
-			istoken = false
-		}
-		if istoken == true {
-			tmp += string(c)
-		}
-		if istoken == false && tmp != "" {
-			if lp == "" {
-				lp = tmp[:]
-				tmp = ""
-			} else if op == "" {
-				op = tmp[:]
-				tmp = ""
-			} else if rp == "" {
-				rp = tmp[:]
-				tmp = ""
-			}
-		}
-	}
-	if tmp != "" && lp == "" && op == "" && rp == "" {
-		lp = tmp[:]
-		op = "exists"
-		rp = ""
-		err = nil
-		return
-	} else if tmp != "" && rp == "" {
-		rp = tmp[:]
 		tmp = ""
 	}
 	return lp, op, rp, err
