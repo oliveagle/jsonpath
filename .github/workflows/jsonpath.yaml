@@ -1,5 +1,11 @@
 name: ci
-on: [pull_request, pull_request_target, push]
+on:
+  push:
+    branches: 
+    - master
+    tags:
+    - v*
+  pull_request: 
 jobs:
   test:
     runs-on: ubuntu-latest
