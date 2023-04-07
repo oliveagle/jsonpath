@@ -54,7 +54,7 @@ func Compile(jpath string) (*Compiled, error) {
 		steps: make([]step, len(tokens)),
 	}
 	for i, token := range tokens {
-		op, key, args, err := parse_token(token)
+		op, key, args, err := parseToken(token)
 		if err != nil {
 			return nil, err
 		}
@@ -73,14 +73,14 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 		// "key", "idx"
 		switch s.op {
 		case "key":
-			obj, err = get_key(obj, s.key)
+			obj, err = getKey(obj, s.key)
 			if err != nil {
 				return nil, err
 			}
 		case "idx":
 			if len(s.key) > 0 {
 				// no key `$[0].test`
-				obj, err = get_key(obj, s.key)
+				obj, err = getKey(obj, s.key)
 				if err != nil {
 					return nil, err
 				}
@@ -90,7 +90,7 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 				res := []interface{}{}
 				for _, x := range s.args.([]int) {
 					//fmt.Println("idx ---- ", x)
-					tmp, err := get_idx(obj, x)
+					tmp, err := getIndex(obj, x)
 					if err != nil {
 						return nil, err
 					}
@@ -99,7 +99,7 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 				obj = res
 			} else if len(s.args.([]int)) == 1 {
 				//fmt.Println("idx ----------------3")
-				obj, err = get_idx(obj, s.args.([]int)[0])
+				obj, err = getIndex(obj, s.args.([]int)[0])
 				if err != nil {
 					return nil, err
 				}
@@ -110,13 +110,13 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 		case "range":
 			if len(s.key) > 0 {
 				// no key `$[:1].test`
-				obj, err = get_key(obj, s.key)
+				obj, err = getKey(obj, s.key)
 				if err != nil {
 					return nil, err
 				}
 			}
-			if argsv, ok := s.args.([2]interface{}); ok == true {
-				obj, err = get_range(obj, argsv[0], argsv[1])
+			if argsv, ok := s.args.([2]interface{}); ok {
+				obj, err = getRange(obj, argsv[0], argsv[1])
 				if err != nil {
 					return nil, err
 				}
@@ -124,11 +124,11 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 				return nil, fmt.Errorf("range args length should be 2")
 			}
 		case "filter":
-			obj, err = get_key(obj, s.key)
+			obj, err = getKey(obj, s.key)
 			if err != nil {
 				return nil, err
 			}
-			obj, err = get_filtered(obj, obj, s.args.(string))
+			obj, err = getFiltered(obj, obj, s.args.(string))
 			if err != nil {
 				return nil, err
 			}
@@ -141,14 +141,11 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 
 func tokenize(query string) ([]string, error) {
 	tokens := []string{}
-	//	token_start := false
-	//	token_end := false
 	token := ""
+	open := 0
 
-	// fmt.Println("-------------------------------------------------- start")
 	for idx, x := range query {
 		token += string(x)
-		// //fmt.Printf("idx: %d, x: %s, token: %s, tokens: %v\n", idx, string(x), token, tokens)
 		if idx == 0 {
 			if token == "$" || token == "@" {
 				tokens = append(tokens, token[:])
@@ -167,20 +164,30 @@ func tokenize(query string) ([]string, error) {
 			token = "."
 			continue
 		} else {
-			// fmt.Println("else: ", string(x), token)
 			if strings.Contains(token, "[") {
-				// fmt.Println(" contains [ ")
 				if x == ']' && !strings.HasSuffix(token, "\\]") {
-					if token[0] == '.' {
-						tokens = append(tokens, token[1:])
-					} else {
-						tokens = append(tokens, token[:])
+					// if token[0] == '.' {
+					// 	tokens = append(tokens, token[1:])
+					// } else {
+					// 	tokens = append(tokens, token[:])
+					// }
+					open--
+
+					if open == 0 {
+						if token[0] == '.' {
+							tokens = append(tokens, token[1:])
+						} else {
+							tokens = append(tokens, token[:])
+						}
+						token = ""
 					}
 					token = ""
 					continue
 				}
+				if x == '[' && !strings.HasSuffix(token, "\\[") {
+					open++
+				}
 			} else {
-				// fmt.Println(" doesn't contains [ ")
 				if x == '.' {
 					if token[0] == '.' {
 						tokens = append(tokens, token[1:len(token)-1])
@@ -215,9 +222,9 @@ func tokenize(query string) ([]string, error) {
 }
 
 /*
- op: "root", "key", "idx", "range", "filter", "scan"
+op: "root", "key", "idx", "range", "filter", "scan"
 */
-func parse_token(token string) (op string, key string, args interface{}, err error) {
+func parseToken(token string) (op string, key string, args interface{}, err error) {
 	if token == "$" {
 		return "root", "$", nil, nil
 	}
@@ -304,11 +311,14 @@ func filter_get_from_explicit_path(obj interface{}, path string) (interface{}, e
 	xobj := obj
 	//fmt.Println("f: xobj", xobj)
 	for _, s := range steps {
-		op, key, args, err := parse_token(s)
+		op, key, args, err := parseToken(s)
+		if err != nil {
+			return nil, err
+		}
 		// "key", "idx"
 		switch op {
 		case "key":
-			xobj, err = get_key(xobj, key)
+			xobj, err = getKey(xobj, key)
 			if err != nil {
 				return nil, err
 			}
@@ -316,11 +326,11 @@ func filter_get_from_explicit_path(obj interface{}, path string) (interface{}, e
 			if len(args.([]int)) != 1 {
 				return nil, fmt.Errorf("don't support multiple index in filter")
 			}
-			xobj, err = get_key(xobj, key)
+			xobj, err = getKey(xobj, key)
 			if err != nil {
 				return nil, err
 			}
-			xobj, err = get_idx(xobj, args.([]int)[0])
+			xobj, err = getIndex(xobj, args.([]int)[0])
 			if err != nil {
 				return nil, err
 			}
@@ -331,7 +341,7 @@ func filter_get_from_explicit_path(obj interface{}, path string) (interface{}, e
 	return xobj, nil
 }
 
-func get_key(obj interface{}, key string) (interface{}, error) {
+func getKey(obj interface{}, key string) (interface{}, error) {
 	if reflect.TypeOf(obj) == nil {
 		return nil, ErrGetFromNullObj
 	}
@@ -358,8 +368,12 @@ func get_key(obj interface{}, key string) (interface{}, error) {
 		// slice we should get from all objects in it.
 		res := []interface{}{}
 		for i := 0; i < reflect.ValueOf(obj).Len(); i++ {
-			tmp, _ := get_idx(obj, i)
-			if v, err := get_key(tmp, key); err == nil {
+			tmp, _ := getIndex(obj, i)
+			if key == "" {
+				res = append(res, tmp)
+				continue
+			}
+			if v, err := getKey(tmp, key); err == nil {
 				res = append(res, v)
 			}
 		}
@@ -369,7 +383,7 @@ func get_key(obj interface{}, key string) (interface{}, error) {
 	}
 }
 
-func get_idx(obj interface{}, idx int) (interface{}, error) {
+func getIndex(obj interface{}, idx int) (interface{}, error) {
 	switch reflect.TypeOf(obj).Kind() {
 	case reflect.Slice:
 		length := reflect.ValueOf(obj).Len()
@@ -391,7 +405,7 @@ func get_idx(obj interface{}, idx int) (interface{}, error) {
 	}
 }
 
-func get_range(obj, frm, to interface{}) (interface{}, error) {
+func getRange(obj, frm, to interface{}) (interface{}, error) {
 	switch reflect.TypeOf(obj).Kind() {
 	case reflect.Slice:
 		length := reflect.ValueOf(obj).Len()
@@ -403,14 +417,14 @@ func get_range(obj, frm, to interface{}) (interface{}, error) {
 		if to == nil {
 			to = length - 1
 		}
-		if fv, ok := frm.(int); ok == true {
+		if fv, ok := frm.(int); ok {
 			if fv < 0 {
 				_frm = length + fv
 			} else {
 				_frm = fv
 			}
 		}
-		if tv, ok := to.(int); ok == true {
+		if tv, ok := to.(int); ok {
 			if tv < 0 {
 				_to = length + tv + 1
 			} else {
@@ -444,8 +458,8 @@ func regFilterCompile(rule string) (*regexp.Regexp, error) {
 	return regexp.Compile(string(runes))
 }
 
-func get_filtered(obj, root interface{}, filter string) ([]interface{}, error) {
-	lp, op, rp, err := parse_filter(filter)
+func getFiltered(obj, root interface{}, filter string) ([]interface{}, error) {
+	lp, op, rp, err := parseFilter(filter)
 	if err != nil {
 		return nil, err
 	}
@@ -463,22 +477,22 @@ func get_filtered(obj, root interface{}, filter string) ([]interface{}, error) {
 
 			for i := 0; i < reflect.ValueOf(obj).Len(); i++ {
 				tmp := reflect.ValueOf(obj).Index(i).Interface()
-				ok, err := eval_reg_filter(tmp, root, lp, pat)
+				ok, err := evalRegFilter(tmp, root, lp, pat)
 				if err != nil {
 					return nil, err
 				}
-				if ok == true {
+				if ok {
 					res = append(res, tmp)
 				}
 			}
 		} else {
 			for i := 0; i < reflect.ValueOf(obj).Len(); i++ {
 				tmp := reflect.ValueOf(obj).Index(i).Interface()
-				ok, err := eval_filter(tmp, root, lp, op, rp)
+				ok, err := evalFilter(tmp, root, lp, op, rp)
 				if err != nil {
 					return nil, err
 				}
-				if ok == true {
+				if ok {
 					res = append(res, tmp)
 				}
 			}
@@ -494,22 +508,22 @@ func get_filtered(obj, root interface{}, filter string) ([]interface{}, error) {
 
 			for _, kv := range reflect.ValueOf(obj).MapKeys() {
 				tmp := reflect.ValueOf(obj).MapIndex(kv).Interface()
-				ok, err := eval_reg_filter(tmp, root, lp, pat)
+				ok, err := evalRegFilter(tmp, root, lp, pat)
 				if err != nil {
 					return nil, err
 				}
-				if ok == true {
+				if ok {
 					res = append(res, tmp)
 				}
 			}
 		} else {
 			for _, kv := range reflect.ValueOf(obj).MapKeys() {
 				tmp := reflect.ValueOf(obj).MapIndex(kv).Interface()
-				ok, err := eval_filter(tmp, root, lp, op, rp)
+				ok, err := evalFilter(tmp, root, lp, op, rp)
 				if err != nil {
 					return nil, err
 				}
-				if ok == true {
+				if ok {
 					res = append(res, tmp)
 				}
 			}
@@ -526,7 +540,7 @@ func get_filtered(obj, root interface{}, filter string) ([]interface{}, error) {
 // @.price <= $.expensive => @.price, <=, $.expensive
 // @.author =~ /.*REES/i  => @.author, match, /.*REES/i
 
-func parse_filter(filter string) (lp string, op string, rp string, err error) {
+func parseFilter(filter string) (lp string, op string, rp string, err error) {
 	tmp := ""
 
 	stage := 0
@@ -534,7 +548,7 @@ func parse_filter(filter string) (lp string, op string, rp string, err error) {
 	for idx, c := range filter {
 		switch c {
 		case '\'':
-			if str_embrace == false {
+			if !str_embrace {
 				str_embrace = true
 			} else {
 				switch stage {
@@ -548,7 +562,7 @@ func parse_filter(filter string) (lp string, op string, rp string, err error) {
 				tmp = ""
 			}
 		case ' ':
-			if str_embrace == true {
+			if str_embrace {
 				tmp += string(c)
 				continue
 			}
@@ -580,55 +594,15 @@ func parse_filter(filter string) (lp string, op string, rp string, err error) {
 		case 2:
 			rp = tmp
 		}
-		tmp = ""
 	}
 	return lp, op, rp, err
 }
 
-func parse_filter_v1(filter string) (lp string, op string, rp string, err error) {
-	tmp := ""
-	istoken := false
-	for _, c := range filter {
-		if istoken == false && c != ' ' {
-			istoken = true
-		}
-		if istoken == true && c == ' ' {
-			istoken = false
-		}
-		if istoken == true {
-			tmp += string(c)
-		}
-		if istoken == false && tmp != "" {
-			if lp == "" {
-				lp = tmp[:]
-				tmp = ""
-			} else if op == "" {
-				op = tmp[:]
-				tmp = ""
-			} else if rp == "" {
-				rp = tmp[:]
-				tmp = ""
-			}
-		}
-	}
-	if tmp != "" && lp == "" && op == "" && rp == "" {
-		lp = tmp[:]
-		op = "exists"
-		rp = ""
-		err = nil
-		return
-	} else if tmp != "" && rp == "" {
-		rp = tmp[:]
-		tmp = ""
-	}
-	return lp, op, rp, err
-}
-
-func eval_reg_filter(obj, root interface{}, lp string, pat *regexp.Regexp) (res bool, err error) {
+func evalRegFilter(obj, root interface{}, lp string, pat *regexp.Regexp) (res bool, err error) {
 	if pat == nil {
 		return false, errors.New("nil pat")
 	}
-	lp_v, err := get_lp_v(obj, root, lp)
+	lp_v, err := getLpAndV(obj, root, lp)
 	if err != nil {
 		return false, err
 	}
@@ -640,7 +614,7 @@ func eval_reg_filter(obj, root interface{}, lp string, pat *regexp.Regexp) (res 
 	}
 }
 
-func get_lp_v(obj, root interface{}, lp string) (interface{}, error) {
+func getLpAndV(obj, root interface{}, lp string) (interface{}, error) {
 	var lp_v interface{}
 	if strings.HasPrefix(lp, "@.") {
 		return filter_get_from_explicit_path(obj, lp)
@@ -652,8 +626,8 @@ func get_lp_v(obj, root interface{}, lp string) (interface{}, error) {
 	return lp_v, nil
 }
 
-func eval_filter(obj, root interface{}, lp, op, rp string) (res bool, err error) {
-	lp_v, err := get_lp_v(obj, root, lp)
+func evalFilter(obj, root interface{}, lp, op, rp string) (res bool, err error) {
+	lp_v, _ := getLpAndV(obj, root, lp)
 
 	if op == "exists" {
 		return lp_v != nil, nil
@@ -662,14 +636,14 @@ func eval_filter(obj, root interface{}, lp, op, rp string) (res bool, err error)
 	} else {
 		var rp_v interface{}
 		if strings.HasPrefix(rp, "@.") {
-			rp_v, err = filter_get_from_explicit_path(obj, rp)
-		} else if strings.HasPrefix(rp, "$.") {
-			rp_v, err = filter_get_from_explicit_path(root, rp)
+			rp_v, _ = filter_get_from_explicit_path(obj, rp)
+		} else if strings.HasPrefix(rp, "$.") || strings.HasPrefix(rp, "$[") {
+			rp_v, _ = filter_get_from_explicit_path(root, rp)
 		} else {
 			rp_v = rp
 		}
 		//fmt.Printf("lp_v: %v, rp_v: %v\n", lp_v, rp_v)
-		return cmp_any(lp_v, rp_v, op)
+		return cmpAny(lp_v, rp_v, op)
 	}
 }
 
@@ -692,7 +666,7 @@ func isNumber(o interface{}) bool {
 	return false
 }
 
-func cmp_any(obj1, obj2 interface{}, op string) (bool, error) {
+func cmpAny(obj1, obj2 interface{}, op string) (bool, error) {
 	switch op {
 	case "<", "<=", "==", ">=", ">":
 	default:
@@ -711,7 +685,7 @@ func cmp_any(obj1, obj2 interface{}, op string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if res.IsValue() == false || (res.Value.String() != "false" && res.Value.String() != "true") {
+	if !res.IsValue() || (res.Value.String() != "false" && res.Value.String() != "true") {
 		return false, fmt.Errorf("result should only be true or false")
 	}
 	if res.Value.String() == "true" {
