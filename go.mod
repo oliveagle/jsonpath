@@ -1,4 +1,4 @@
-module github.com/oliveagle/jsonpath
+module github.com/dolthub/jsonpath
 
 go 1.15
 
