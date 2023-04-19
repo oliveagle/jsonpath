@@ -9,7 +9,7 @@ but also with some minor differences.
 
 this library is till bleeding edge, so use it at your own risk. :D
 
-**Golang Version Required**: 1.5+
+**Golang Version Required**: 1.15+
 
 Get Started
 ------------
