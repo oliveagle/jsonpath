@@ -76,7 +76,7 @@ func (c *Compiled) String() string {
 func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 	var err error
 	for _, s := range c.steps {
-		// "key", "idx"
+		// "key", "idx", "range", "filter", "scan"
 		switch s.op {
 		case "key":
 			obj, err = get_key(obj, s.key)
@@ -138,8 +138,13 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 			if err != nil {
 				return nil, err
 			}
+		case "scan":
+			obj, err = get_scan(obj)
+			if err != nil {
+				return nil, err
+			}
 		default:
-			return nil, fmt.Errorf("expression don't support in filter")
+			return nil, fmt.Errorf("unsupported jsonpath operation: %s", s.op)
 		}
 	}
 	return obj, nil
@@ -354,7 +359,7 @@ func filter_get_from_explicit_path(obj interface{}, path string) (interface{}, e
 				return nil, err
 			}
 		default:
-			return nil, fmt.Errorf("expression don't support in filter")
+			return nil, fmt.Errorf("unsupported jsonpath operation %s in filter", op)
 		}
 	}
 	return xobj, nil
@@ -548,6 +553,41 @@ func get_filtered(obj, root interface{}, filter string) ([]interface{}, error) {
 	}
 
 	return res, nil
+}
+
+func get_scan(obj interface{}) (interface{}, error) {
+	if reflect.TypeOf(obj) == nil {
+		return nil, ErrGetFromNullObj
+	}
+	switch reflect.TypeOf(obj).Kind() {
+	case reflect.Map:
+		var res []interface{}
+		if jsonMap, ok := obj.(map[string]interface{}); ok {
+			for _, v := range jsonMap {
+				res = append(res, v)
+			}
+			return res, nil
+		}
+		iter := reflect.ValueOf(obj).MapRange()
+		for iter.Next() {
+			res = append(res, iter.Value().Interface())
+		}
+		return res, nil
+	case reflect.Slice:
+		// slice we should get from all objects in it.
+		var res []interface{}
+		for i := 0; i < reflect.ValueOf(obj).Len(); i++ {
+			tmp := reflect.ValueOf(obj).Index(i).Interface()
+			newObj, err := get_scan(tmp)
+			if err != nil {
+				return nil, err
+			}
+			res = append(res, newObj.([]interface{})...)
+		}
+		return res, nil
+	default:
+		return nil, fmt.Errorf("object is not scanable: %v", reflect.TypeOf(obj).Kind())
+	}
 }
 
 // @.isbn                 => @.isbn, exists, nil
