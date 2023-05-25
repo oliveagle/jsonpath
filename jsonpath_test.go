@@ -542,7 +542,6 @@ func Test_jsonpath_get_scan(t *testing.T) {
 		"key": 1,
 	}
 	res, err := get_scan(obj)
-	t.Logf("err: %v, res: %v", err, res)
 	if err != nil {
 		t.Errorf("failed to scan: %v", err)
 		return
@@ -554,9 +553,8 @@ func Test_jsonpath_get_scan(t *testing.T) {
 
 	obj2 := 1
 	res, err = get_scan(obj2)
-	t.Logf("err: %v, res: %v", err, res)
-	if err == nil {
-		t.Errorf("object is not scanable error not raised")
+	if err == nil || err.Error() != "object is not scannable: int" {
+		t.Errorf("object is not scannable error not raised")
 		return
 	}
 
@@ -573,12 +571,14 @@ func Test_jsonpath_get_scan(t *testing.T) {
 	if len(res_v) != 3 {
 		t.Errorf("scanned result is of wrong length")
 	}
-	// order of items in maps can't be guaranteed
-	for _, v := range res_v {
-		val, _ := v.(string)
-		if val != "hah1" && val != "hah2" && val != "hah3" {
-			t.Errorf("scanned result contains unexpected value: %v", val)
-		}
+	if v, ok := res_v[0].(string); !ok || v != "hah1" {
+		t.Errorf("scanned result contains unexpected value: %v", v)
+	}
+	if v, ok := res_v[1].(string); !ok || v != "hah2" {
+		t.Errorf("scanned result contains unexpected value: %v", v)
+	}
+	if v, ok := res_v[2].(string); !ok || v != "hah3" {
+		t.Errorf("scanned result contains unexpected value: %v", v)
 	}
 
 	obj4 := map[string]interface{}{
@@ -590,36 +590,30 @@ func Test_jsonpath_get_scan(t *testing.T) {
 			"c": 3,
 		},
 		"key4" : []interface{}{1,2,3},
+		"key5" : nil,
 	}
 	res, err = get_scan(obj4)
 	res_v, ok = res.([]interface{})
 	if !ok {
 		t.Errorf("scanned result is not a slice")
 	}
-	if len(res_v) != 4 {
+	if len(res_v) != 5 {
 		t.Errorf("scanned result is of wrong length")
 	}
-	// order of items in maps can't be guaranteed
-	for _, v := range res_v {
-		switch v.(type) {
-		case string:
-			if v_str, ok := v.(string); ok && v_str == "abc" {
-				continue
-			}
-		case int:
-			if v_int, ok := v.(int); ok && v_int == 123 {
-				continue
-			}
-		case map[string]interface{}:
-			if v_map, ok := v.(map[string]interface{}); ok && v_map["a"].(int) == 1 && v_map["b"].(int) == 2 && v_map["c"].(int) == 3 {
-				continue
-			}
-		case []interface{}:
-			if v_slice, ok := v.([]interface{}); ok && v_slice[0].(int) == 1 && v_slice[1].(int) == 2 && v_slice[2].(int) == 3 {
-				continue
-			}
-		}
+	if v, ok := res_v[0].(string); !ok || v != "abc" {
 		t.Errorf("scanned result contains unexpected value: %v", v)
+	}
+	if v, ok := res_v[1].(int); !ok || v != 123 {
+		t.Errorf("scanned result contains unexpected value: %v", v)
+	}
+	if v, ok := res_v[2].(map[string]interface{}); !ok || v["a"].(int) != 1 || v["b"].(int) != 2 || v["c"].(int) != 3 {
+		t.Errorf("scanned result contains unexpected value: %v", v)
+	}
+	if v, ok := res_v[3].([]interface{}); !ok || v[0].(int) != 1 || v[1].(int) != 2 || v[2].(int) != 3 {
+		t.Errorf("scanned result contains unexpected value: %v", v)
+	}
+	if res_v[4] != nil {
+		t.Errorf("scanned result contains unexpected value: %v", res_v[4])
 	}
 }
 

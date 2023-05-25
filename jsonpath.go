@@ -13,6 +13,7 @@ import (
 	"go/types"
 	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -142,6 +143,13 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 			obj, err = get_scan(obj)
 			if err != nil {
 				return nil, err
+			}
+			if obj == nil {
+				continue
+			}
+			// empty scan is NULL
+			if len(obj.([]interface{})) == 0 {
+				obj = nil
 			}
 		default:
 			return nil, fmt.Errorf("unsupported jsonpath operation: %s", s.op)
@@ -557,20 +565,38 @@ func get_filtered(obj, root interface{}, filter string) ([]interface{}, error) {
 
 func get_scan(obj interface{}) (interface{}, error) {
 	if reflect.TypeOf(obj) == nil {
-		return nil, ErrGetFromNullObj
+		return nil, nil
 	}
 	switch reflect.TypeOf(obj).Kind() {
 	case reflect.Map:
+		// iterate over keys in sorted by length, then alphabetically
 		var res []interface{}
 		if jsonMap, ok := obj.(map[string]interface{}); ok {
-			for _, v := range jsonMap {
-				res = append(res, v)
+			var sortedKeys []string
+			for k := range jsonMap {
+				sortedKeys = append(sortedKeys, k)
+			}
+			sort.Slice(sortedKeys, func(i, j int) bool {
+				if len(sortedKeys[i]) != len(sortedKeys[j]) {
+					return len(sortedKeys[i]) < len(sortedKeys[j])
+				}
+				return sortedKeys[i] < sortedKeys[j]
+			})
+			for _, k := range sortedKeys {
+				res = append(res, jsonMap[k])
 			}
 			return res, nil
 		}
-		iter := reflect.ValueOf(obj).MapRange()
-		for iter.Next() {
-			res = append(res, iter.Value().Interface())
+		keys := reflect.ValueOf(obj).MapKeys()
+		sort.Slice(keys, func(i, j int) bool {
+			ki, kj := keys[i].String(), keys[j].String()
+			if len(ki) != len(kj) {
+				return len(ki) < len(kj)
+			}
+			return ki < kj
+		})
+		for _, k := range keys {
+			res = append(res, reflect.ValueOf(obj).MapIndex(k).Interface())
 		}
 		return res, nil
 	case reflect.Slice:
@@ -586,7 +612,7 @@ func get_scan(obj interface{}) (interface{}, error) {
 		}
 		return res, nil
 	default:
-		return nil, fmt.Errorf("object is not scanable: %v", reflect.TypeOf(obj).Kind())
+		return nil, fmt.Errorf("object is not scannable: %v", reflect.TypeOf(obj).Kind())
 	}
 }
 
