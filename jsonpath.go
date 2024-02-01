@@ -16,9 +16,13 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	errKind "gopkg.in/src-d/go-errors.v1"
 )
 
 var ErrGetFromNullObj = errors.New("get attribute from null object")
+var ErrKeyError = errKind.NewKind("key error: %s not found in object")
+
 
 func JsonPathLookup(obj interface{}, jpath string) (interface{}, error) {
 	c, err := Compile(jpath)
@@ -385,7 +389,7 @@ func get_key(obj interface{}, key string) (interface{}, error) {
 		if jsonMap, ok := obj.(map[string]interface{}); ok {
 			val, exists := jsonMap[key]
 			if !exists {
-				return nil, fmt.Errorf("key error: %s not found in object", key)
+				return nil, ErrKeyError.New(key)
 			}
 			return val, nil
 		}
@@ -395,7 +399,7 @@ func get_key(obj interface{}, key string) (interface{}, error) {
 				return reflect.ValueOf(obj).MapIndex(kv).Interface(), nil
 			}
 		}
-		return nil, fmt.Errorf("key error: %s not found in object", key)
+		return nil, ErrKeyError.New(key)
 	case reflect.Slice:
 		// slice we should get from all objects in it.
 		res := []interface{}{}
