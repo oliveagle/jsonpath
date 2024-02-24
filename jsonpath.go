@@ -1,3 +1,9 @@
+// Copyright 2015, 2021; oliver, DoltHub Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package jsonpath
 
 import (
@@ -7,11 +13,16 @@ import (
 	"go/types"
 	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
+
+	errKind "gopkg.in/src-d/go-errors.v1"
 )
 
 var ErrGetFromNullObj = errors.New("get attribute from null object")
+var ErrKeyError = errKind.NewKind("key error: %s not found in object")
+
 
 func JsonPathLookup(obj interface{}, jpath string) (interface{}, error) {
 	c, err := Compile(jpath)
@@ -70,7 +81,7 @@ func (c *Compiled) String() string {
 func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 	var err error
 	for _, s := range c.steps {
-		// "key", "idx"
+		// "key", "idx", "range", "filter", "scan"
 		switch s.op {
 		case "key":
 			obj, err = get_key(obj, s.key)
@@ -132,8 +143,20 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 			if err != nil {
 				return nil, err
 			}
+		case "scan":
+			obj, err = get_scan(obj)
+			if err != nil {
+				return nil, err
+			}
+			if obj == nil {
+				continue
+			}
+			// empty scan is NULL
+			if len(obj.([]interface{})) == 0 {
+				obj = nil
+			}
 		default:
-			return nil, fmt.Errorf("expression don't support in filter")
+			return nil, fmt.Errorf("unsupported jsonpath operation: %s", s.op)
 		}
 	}
 	return obj, nil
@@ -144,9 +167,27 @@ func tokenize(query string) ([]string, error) {
 	//	token_start := false
 	//	token_end := false
 	token := ""
+	quoteChar := rune(0)
 
 	// fmt.Println("-------------------------------------------------- start")
 	for idx, x := range query {
+		if quoteChar != 0 {
+			if x == quoteChar {
+				quoteChar = 0
+			} else {
+				token += string(x)
+			}
+
+			continue
+		} else if x == '"' {
+			if token == "." {
+				token = ""
+			}
+
+			quoteChar = x
+			continue
+		}
+
 		token += string(x)
 		// //fmt.Printf("idx: %d, x: %s, token: %s, tokens: %v\n", idx, string(x), token, tokens)
 		if idx == 0 {
@@ -193,6 +234,11 @@ func tokenize(query string) ([]string, error) {
 			}
 		}
 	}
+
+	if quoteChar != 0 {
+		token = string(quoteChar) + token
+	}
+
 	if len(token) > 0 {
 		if token[0] == '.' {
 			token = token[1:]
@@ -325,7 +371,7 @@ func filter_get_from_explicit_path(obj interface{}, path string) (interface{}, e
 				return nil, err
 			}
 		default:
-			return nil, fmt.Errorf("expression don't support in filter")
+			return nil, fmt.Errorf("unsupported jsonpath operation %s in filter", op)
 		}
 	}
 	return xobj, nil
@@ -343,7 +389,7 @@ func get_key(obj interface{}, key string) (interface{}, error) {
 		if jsonMap, ok := obj.(map[string]interface{}); ok {
 			val, exists := jsonMap[key]
 			if !exists {
-				return nil, fmt.Errorf("key error: %s not found in object", key)
+				return nil, ErrKeyError.New(key)
 			}
 			return val, nil
 		}
@@ -353,7 +399,7 @@ func get_key(obj interface{}, key string) (interface{}, error) {
 				return reflect.ValueOf(obj).MapIndex(kv).Interface(), nil
 			}
 		}
-		return nil, fmt.Errorf("key error: %s not found in object", key)
+		return nil, ErrKeyError.New(key)
 	case reflect.Slice:
 		// slice we should get from all objects in it.
 		res := []interface{}{}
@@ -519,6 +565,59 @@ func get_filtered(obj, root interface{}, filter string) ([]interface{}, error) {
 	}
 
 	return res, nil
+}
+
+func get_scan(obj interface{}) (interface{}, error) {
+	if reflect.TypeOf(obj) == nil {
+		return nil, nil
+	}
+	switch reflect.TypeOf(obj).Kind() {
+	case reflect.Map:
+		// iterate over keys in sorted by length, then alphabetically
+		var res []interface{}
+		if jsonMap, ok := obj.(map[string]interface{}); ok {
+			var sortedKeys []string
+			for k := range jsonMap {
+				sortedKeys = append(sortedKeys, k)
+			}
+			sort.Slice(sortedKeys, func(i, j int) bool {
+				if len(sortedKeys[i]) != len(sortedKeys[j]) {
+					return len(sortedKeys[i]) < len(sortedKeys[j])
+				}
+				return sortedKeys[i] < sortedKeys[j]
+			})
+			for _, k := range sortedKeys {
+				res = append(res, jsonMap[k])
+			}
+			return res, nil
+		}
+		keys := reflect.ValueOf(obj).MapKeys()
+		sort.Slice(keys, func(i, j int) bool {
+			ki, kj := keys[i].String(), keys[j].String()
+			if len(ki) != len(kj) {
+				return len(ki) < len(kj)
+			}
+			return ki < kj
+		})
+		for _, k := range keys {
+			res = append(res, reflect.ValueOf(obj).MapIndex(k).Interface())
+		}
+		return res, nil
+	case reflect.Slice:
+		// slice we should get from all objects in it.
+		var res []interface{}
+		for i := 0; i < reflect.ValueOf(obj).Len(); i++ {
+			tmp := reflect.ValueOf(obj).Index(i).Interface()
+			newObj, err := get_scan(tmp)
+			if err != nil {
+				return nil, err
+			}
+			res = append(res, newObj.([]interface{})...)
+		}
+		return res, nil
+	default:
+		return nil, fmt.Errorf("object is not scannable: %v", reflect.TypeOf(obj).Kind())
+	}
 }
 
 // @.isbn                 => @.isbn, exists, nil
