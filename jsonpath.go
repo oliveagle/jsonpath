@@ -56,6 +56,9 @@ func Compile(jpath string) (*Compiled, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(tokens) == 0 {
+		return nil, fmt.Errorf("empty path")
+	}
 	if tokens[0] != "@" && tokens[0] != "$" {
 		return nil, fmt.Errorf("$ or @ should in front of path")
 	}

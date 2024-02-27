@@ -64,8 +64,14 @@ func init() {
 }
 
 func Test_jsonpath_JsonPathLookup_1(t *testing.T) {
+	// empty string
+	res, err := JsonPathLookup(json_data, "")
+	if err == nil {
+		t.Errorf("expected error from empty jsonpath")
+	}
+
 	// key from root
-	res, _ := JsonPathLookup(json_data, "$.expensive")
+	res, _ = JsonPathLookup(json_data, "$.expensive")
 	if res_v, ok := res.(float64); ok != true || res_v != 10.0 {
 		t.Errorf("expensive should be 10")
 	}
@@ -89,7 +95,7 @@ func Test_jsonpath_JsonPathLookup_1(t *testing.T) {
 	}
 
 	// multiple index
-	res, err := JsonPathLookup(json_data, "$.store.book[0,1].price")
+	res, err = JsonPathLookup(json_data, "$.store.book[0,1].price")
 	t.Log(err, res)
 	if res_v, ok := res.([]interface{}); ok != true || res_v[0].(float64) != 8.95 || res_v[1].(float64) != 12.99 {
 		t.Errorf("exp: [8.95, 12.99], got: %v", res)
