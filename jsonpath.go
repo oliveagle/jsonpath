@@ -69,7 +69,7 @@ func (c *Compiled) String() string {
 
 func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 	var err error
-	for _, s := range c.steps {
+	for i, s := range c.steps {
 		// "key", "idx"
 		switch s.op {
 		case "key":
@@ -132,6 +132,24 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 			if err != nil {
 				return nil, err
 			}
+		case "recursive":
+			obj = getAllDescendants(obj)
+			// Heuristic: if next step is key, exclude slices from candidates to avoid double-matching
+			// (once as container via implicit map, once as individual elements)
+			if i+1 < len(c.steps) && c.steps[i+1].op == "key" {
+				if candidates, ok := obj.([]interface{}); ok {
+					filtered := []interface{}{}
+					for _, cand := range candidates {
+						// Filter out Slices (but keep Maps and others)
+						// because get_key on Slice iterates children, which are already in candidates
+						v := reflect.ValueOf(cand)
+						if v.Kind() != reflect.Slice {
+							filtered = append(filtered, cand)
+						}
+					}
+					obj = filtered
+				}
+			}
 		default:
 			return nil, fmt.Errorf("expression don't support in filter")
 		}
@@ -161,8 +179,8 @@ func tokenize(query string) ([]string, error) {
 		if token == "." {
 			continue
 		} else if token == ".." {
-			if tokens[len(tokens)-1] != "*" {
-				tokens = append(tokens, "*")
+			if len(tokens) == 0 || tokens[len(tokens)-1] != ".." {
+				tokens = append(tokens, "..")
 			}
 			token = "."
 			continue
@@ -215,7 +233,7 @@ func tokenize(query string) ([]string, error) {
 }
 
 /*
- op: "root", "key", "idx", "range", "filter", "scan"
+op: "root", "key", "idx", "range", "filter", "scan"
 */
 func parse_token(token string) (op string, key string, args interface{}, err error) {
 	if token == "$" {
@@ -223,6 +241,9 @@ func parse_token(token string) (op string, key string, args interface{}, err err
 	}
 	if token == "*" {
 		return "scan", "*", nil, nil
+	}
+	if token == ".." {
+		return "recursive", "..", nil, nil
 	}
 
 	bracket_idx := strings.Index(token, "[")
@@ -719,4 +740,38 @@ func cmp_any(obj1, obj2 interface{}, op string) (bool, error) {
 	}
 
 	return false, nil
+}
+
+func getAllDescendants(obj interface{}) []interface{} {
+	res := []interface{}{}
+	var recurse func(curr interface{})
+	recurse = func(curr interface{}) {
+		res = append(res, curr)
+		v := reflect.ValueOf(curr)
+		if !v.IsValid() {
+			return
+		}
+
+		kind := v.Kind()
+		if kind == reflect.Ptr {
+			v = v.Elem()
+			if !v.IsValid() {
+				return
+			}
+			kind = v.Kind()
+		}
+
+		switch kind {
+		case reflect.Map:
+			for _, k := range v.MapKeys() {
+				recurse(v.MapIndex(k).Interface())
+			}
+		case reflect.Slice, reflect.Array:
+			for i := 0; i < v.Len(); i++ {
+				recurse(v.Index(i).Interface())
+			}
+		}
+	}
+	recurse(obj)
+	return res
 }

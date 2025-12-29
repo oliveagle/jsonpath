@@ -96,7 +96,7 @@ func Test_jsonpath_JsonPathLookup_1(t *testing.T) {
 	if res_v, ok := res.([]interface{}); ok != true || res_v[0].(float64) != 8.95 || res_v[1].(float64) != 12.99 || res_v[2].(float64) != 8.99 || res_v[3].(float64) != 22.99 {
 		t.Errorf("exp: [8.95, 12.99, 8.99, 22.99], got: %v", res)
 	}
-	
+
 	// range
 	res, err = JsonPathLookup(json_data, "$.store.book[0:1].price")
 	t.Log(err, res)
@@ -156,7 +156,7 @@ func Test_jsonpath_authors_of_all_books(t *testing.T) {
 var token_cases = []map[string]interface{}{
 	map[string]interface{}{
 		"query":  "$..author",
-		"tokens": []string{"$", "*", "author"},
+		"tokens": []string{"$", "..", "author"},
 	},
 	map[string]interface{}{
 		"query":  "$.store.*",
@@ -164,7 +164,7 @@ var token_cases = []map[string]interface{}{
 	},
 	map[string]interface{}{
 		"query":  "$.store..price",
-		"tokens": []string{"$", "store", "*", "price"},
+		"tokens": []string{"$", "store", "..", "price"},
 	},
 	map[string]interface{}{
 		"query":  "$.store.book[*].author",
@@ -172,23 +172,23 @@ var token_cases = []map[string]interface{}{
 	},
 	map[string]interface{}{
 		"query":  "$..book[2]",
-		"tokens": []string{"$", "*", "book[2]"},
+		"tokens": []string{"$", "..", "book[2]"},
 	},
 	map[string]interface{}{
 		"query":  "$..book[(@.length-1)]",
-		"tokens": []string{"$", "*", "book[(@.length-1)]"},
+		"tokens": []string{"$", "..", "book[(@.length-1)]"},
 	},
 	map[string]interface{}{
 		"query":  "$..book[0,1]",
-		"tokens": []string{"$", "*", "book[0,1]"},
+		"tokens": []string{"$", "..", "book[0,1]"},
 	},
 	map[string]interface{}{
 		"query":  "$..book[:2]",
-		"tokens": []string{"$", "*", "book[:2]"},
+		"tokens": []string{"$", "..", "book[:2]"},
 	},
 	map[string]interface{}{
 		"query":  "$..book[?(@.isbn)]",
-		"tokens": []string{"$", "*", "book[?(@.isbn)]"},
+		"tokens": []string{"$", "..", "book[?(@.isbn)]"},
 	},
 	map[string]interface{}{
 		"query":  "$.store.book[?(@.price < 10)]",
@@ -196,23 +196,23 @@ var token_cases = []map[string]interface{}{
 	},
 	map[string]interface{}{
 		"query":  "$..book[?(@.price <= $.expensive)]",
-		"tokens": []string{"$", "*", "book[?(@.price <= $.expensive)]"},
+		"tokens": []string{"$", "..", "book[?(@.price <= $.expensive)]"},
 	},
 	map[string]interface{}{
 		"query":  "$..book[?(@.author =~ /.*REES/i)]",
-		"tokens": []string{"$", "*", "book[?(@.author =~ /.*REES/i)]"},
+		"tokens": []string{"$", "..", "book[?(@.author =~ /.*REES/i)]"},
 	},
 	map[string]interface{}{
 		"query":  "$..book[?(@.author =~ /.*REES\\]/i)]",
-		"tokens": []string{"$", "*", "book[?(@.author =~ /.*REES\\]/i)]"},
+		"tokens": []string{"$", "..", "book[?(@.author =~ /.*REES\\]/i)]"},
 	},
 	map[string]interface{}{
 		"query":  "$..*",
-		"tokens": []string{"$", "*"},
+		"tokens": []string{"$", "..", "*"},
 	},
 	map[string]interface{}{
 		"query":  "$....author",
-		"tokens": []string{"$", "*", "author"},
+		"tokens": []string{"$", "..", "author"},
 	},
 }
 
@@ -1179,13 +1179,13 @@ func Test_jsonpath_rootnode_is_array_range(t *testing.T) {
 		t.Logf("idx: %v, v: %v", idx, v)
 	}
 	if len(ares) != 2 {
-		t.Fatal("len is not 2. got: %v", len(ares))
+		t.Fatalf("len is not 2. got: %v", len(ares))
 	}
 	if ares[0].(float64) != 12.34 {
-		t.Fatal("idx: 0, should be 12.34. got: %v", ares[0])
+		t.Fatalf("idx: 0, should be 12.34. got: %v", ares[0])
 	}
 	if ares[1].(float64) != 13.34 {
-		t.Fatal("idx: 0, should be 12.34. got: %v", ares[1])
+		t.Fatalf("idx: 0, should be 12.34. got: %v", ares[1])
 	}
 }
 
@@ -1232,7 +1232,7 @@ func Test_jsonpath_rootnode_is_nested_array_range(t *testing.T) {
 		t.Logf("idx: %v, v: %v", idx, v)
 	}
 	if len(ares) != 2 {
-		t.Fatal("len is not 2. got: %v", len(ares))
+		t.Fatalf("len is not 2. got: %v", len(ares))
 	}
 
 	//FIXME: `$[:1].[0].test` got wrong result
@@ -1242,4 +1242,78 @@ func Test_jsonpath_rootnode_is_nested_array_range(t *testing.T) {
 	//if ares[1].(float64) != 3.1 {
 	//	t.Fatal("idx: 0, should be 3.1, got: %v", ares[1])
 	//}
+}
+
+func TestRecursiveDescent(t *testing.T) {
+	data := `
+{
+    "store": {
+        "book": [
+            {
+                "category": "reference",
+                "author": "Nigel Rees",
+                "title": "Sayings of the Century",
+                "price": 8.95
+            },
+            {
+                "category": "fiction",
+                "author": "Evelyn Waugh",
+                "title": "Sword of Honour",
+                "price": 12.99
+            },
+            {
+                "category": "fiction",
+                "author": "Herman Melville",
+                "title": "Moby Dick",
+                "isbn": "0-553-21311-3",
+                "price": 8.99
+            },
+            {
+                "category": "fiction",
+                "author": "J. R. R. Tolkien",
+                "title": "The Lord of the Rings",
+                "isbn": "0-395-19395-8",
+                "price": 22.99
+            }
+        ],
+        "bicycle": {
+            "color": "red",
+            "price": 19.95
+        }
+    },
+    "expensive": 10
+}
+`
+	var json_data interface{}
+	json.Unmarshal([]byte(data), &json_data)
+
+	// Test case: $..author should return all authors
+	authors_query := "$..author"
+	res, err := JsonPathLookup(json_data, authors_query)
+	if err != nil {
+		t.Fatalf("Failed to execute recursive query %s: %v", authors_query, err)
+	}
+
+	authors, ok := res.([]interface{})
+	if !ok {
+		t.Fatalf("Expected []interface{}, got %T", res)
+	}
+
+	if len(authors) != 4 {
+		t.Errorf("Expected 4 authors, got %d: %v", len(authors), authors)
+	}
+
+	// Test case: $..price should return all prices (5 total: 4 books + 1 bicycle)
+	price_query := "$..price"
+	res, err = JsonPathLookup(json_data, price_query)
+	if err != nil {
+		t.Fatalf("Failed to execute recursive query %s: %v", price_query, err)
+	}
+	prices, ok := res.([]interface{})
+	if !ok {
+		t.Fatalf("Expected []interface{}, got %T", res)
+	}
+	if len(prices) != 5 {
+		t.Errorf("Expected 5 prices, got %d: %v", len(prices), prices)
+	}
 }
