@@ -361,10 +361,19 @@ func get_key(obj interface{}, key string) (interface{}, error) {
 			}
 			return val, nil
 		}
+<<<<<<< HEAD
 		for _, kv := range value.MapKeys() {
-			//fmt.Println(kv.String())
+			// Support map[interface{}]interface{} with string key
+			if kv.Interface() == key {
+				return value.MapIndex(kv).Interface(), nil
+			}
 			if kv.String() == key {
 				return value.MapIndex(kv).Interface(), nil
+			}
+		}
+			if kv.String() == key {
+				return of.MapIndex(kv).Interface(), nil
+>>>>>>> pr-24
 			}
 		}
 		return nil, fmt.Errorf("key error: %s not found in object", key)
