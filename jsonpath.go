@@ -323,12 +323,19 @@ func parse_token(token string) (op string, key string, args interface{}, err err
 		tail = tail[1 : len(tail)-1]
 
 		//fmt.Println(key, tail)
-		if strings.Contains(tail, "?") {
+		if strings.HasPrefix(tail, "?") {
 			// filter -------------------------------------------------
 			op = "filter"
-			if strings.HasPrefix(tail, "?(") && strings.HasSuffix(tail, ")") {
-				args = strings.Trim(tail[2:len(tail)-1], " ")
+			// Remove leading ? - the content is everything after ?
+			filterContent := tail[1:]
+			// Handle filters like [?( @.isbn )] - remove outer parentheses if present
+			filterContent = strings.TrimSpace(filterContent)
+			if strings.HasPrefix(filterContent, "(") && strings.HasSuffix(filterContent, ")") {
+				// Remove outer parentheses
+				inner := filterContent[1 : len(filterContent)-1]
+				filterContent = strings.TrimSpace(inner)
 			}
+			args = filterContent
 			return
 		} else if strings.Contains(tail, ":") {
 			// range ----------------------------------------------
@@ -695,18 +702,53 @@ func get_scan(obj interface{}) (interface{}, error) {
 // @.price < 10           => @.price, <, 10
 // @.price <= $.expensive => @.price, <=, $.expensive
 // @.author =~ /.*REES/i  => @.author, match, /.*REES/i
-
+// count(@.book) > 0      => count(@.book), >, 0
+// match(@.author, 'REES') => match(@.author, 'REES'), exists, nil
 func parse_filter(filter string) (lp string, op string, rp string, err error) {
 	tmp := ""
 
 	stage := 0
-	str_embrace := false
+	quoteChar := rune(0)
+	parenDepth := 0
 	for idx, c := range filter {
 		switch c {
 		case '\'':
-			if str_embrace == false {
-				str_embrace = true
+			if quoteChar == 0 {
+				quoteChar = c
+			} else if c == quoteChar {
+				quoteChar = 0
 			} else {
+				tmp += string(c)
+			}
+			continue
+		case '"':
+			if quoteChar == 0 {
+				quoteChar = c
+			} else if c == quoteChar {
+				quoteChar = 0
+			} else {
+				tmp += string(c)
+			}
+			continue
+		case '(':
+			if quoteChar == 0 {
+				parenDepth++
+			}
+			tmp += string(c)
+			continue
+		case ')':
+			if quoteChar == 0 {
+				parenDepth--
+			}
+			tmp += string(c)
+			continue
+		case ' ':
+			if quoteChar != 0 || parenDepth > 0 {
+				// Inside quotes or parentheses, keep the space
+				tmp += string(c)
+				continue
+			}
+			if tmp != "" {
 				switch stage {
 				case 0:
 					lp = tmp
@@ -716,25 +758,10 @@ func parse_filter(filter string) (lp string, op string, rp string, err error) {
 					rp = tmp
 				}
 				tmp = ""
-			}
-		case ' ':
-			if str_embrace == true {
-				tmp += string(c)
-				continue
-			}
-			switch stage {
-			case 0:
-				lp = tmp
-			case 1:
-				op = tmp
-			case 2:
-				rp = tmp
-			}
-			tmp = ""
-
-			stage += 1
-			if stage > 2 {
-				return "", "", "", errors.New(fmt.Sprintf("invalid char at %d: `%c`", idx, c))
+				stage++
+				if stage > 2 {
+					return "", "", "", errors.New(fmt.Sprintf("invalid char at %d: `%c`", idx, c))
+				}
 			}
 		default:
 			tmp += string(c)
@@ -744,13 +771,16 @@ func parse_filter(filter string) (lp string, op string, rp string, err error) {
 		switch stage {
 		case 0:
 			lp = tmp
-			op = "exists"
+			if strings.HasSuffix(lp, ")") || stage == 0 {
+				// Function call without operator, or simple expression without operator
+				// set exists operator
+				op = "exists"
+			}
 		case 1:
 			op = tmp
 		case 2:
 			rp = tmp
 		}
-		tmp = ""
 	}
 	return lp, op, rp, err
 }
@@ -811,6 +841,11 @@ func eval_reg_filter(obj, root interface{}, lp string, pat *regexp.Regexp) (res 
 }
 
 func get_lp_v(obj, root interface{}, lp string) (interface{}, error) {
+	// Check if lp is a function call like count(@.xxx) or match(@.xxx, pattern)
+	if strings.HasSuffix(lp, ")") {
+		return eval_filter_func(obj, root, lp)
+	}
+
 	var lp_v interface{}
 	if strings.HasPrefix(lp, "@.") {
 		return filter_get_from_explicit_path(obj, lp)
@@ -822,10 +857,269 @@ func get_lp_v(obj, root interface{}, lp string) (interface{}, error) {
 	return lp_v, nil
 }
 
+// eval_filter_func evaluates function calls in filter expressions
+func eval_filter_func(obj, root interface{}, expr string) (interface{}, error) {
+	// Find the first ( that starts the function arguments
+	parenIdx := -1
+	for i, c := range expr {
+		if c == '(' {
+			parenIdx = i
+			break
+		}
+	}
+
+	if parenIdx < 0 {
+		return nil, fmt.Errorf("invalid function call: %s", expr)
+	}
+
+	funcName := strings.TrimSpace(expr[:parenIdx])
+
+	// Find the matching closing parenthesis
+	argsStart := parenIdx + 1
+	argsEnd := -1
+	depth := 1
+	for i := argsStart; i < len(expr); i++ {
+		if expr[i] == '(' {
+			depth++
+		} else if expr[i] == ')' {
+			depth--
+			if depth == 0 {
+				argsEnd = i
+				break
+			}
+		}
+	}
+
+	if argsEnd < 0 {
+		return nil, fmt.Errorf("mismatched parentheses in function call: %s", expr)
+	}
+
+	argsStr := expr[argsStart:argsEnd]
+
+	// Split arguments by comma (respecting nested parentheses and quotes)
+	var args []string
+	current := ""
+	argDepth := 0
+	quoteChar := rune(0)
+	for _, c := range argsStr {
+		if quoteChar != 0 {
+			if c == quoteChar {
+				quoteChar = 0
+			}
+			current += string(c)
+			continue
+		}
+		if c == '"' || c == '\'' {
+			quoteChar = c
+			current += string(c)
+			continue
+		}
+		if c == '(' {
+			argDepth++
+		} else if c == ')' {
+			argDepth--
+		} else if c == ',' && argDepth == 0 {
+			args = append(args, strings.TrimSpace(current))
+			current = ""
+			continue
+		}
+		current += string(c)
+	}
+	if current != "" {
+		args = append(args, strings.TrimSpace(current))
+	}
+
+	// Evaluate function based on name
+	switch funcName {
+	case "count":
+		return eval_count(obj, root, args)
+	case "match":
+		return eval_match(obj, root, args)
+	case "search":
+		return eval_search(obj, root, args)
+	case "length":
+		return eval_length(obj, root, args)
+	default:
+		return nil, fmt.Errorf("unsupported function: %s()", funcName)
+	}
+}
+
+// eval_count evaluates count() function - returns the count of nodes in a nodelist
+func eval_count(obj, root interface{}, args []string) (interface{}, error) {
+	if len(args) != 1 {
+		return nil, fmt.Errorf("count() requires 1 argument, got %d", len(args))
+	}
+
+	arg := args[0]
+
+	// Special case: count(@) or count('') returns the length of the root array
+	if arg == "@" || arg == "" {
+		// Use root to get the array length
+		if root == nil {
+			return 0, nil
+		}
+		rv := reflect.ValueOf(root)
+		switch rv.Kind() {
+		case reflect.Array, reflect.Slice:
+			return rv.Len(), nil
+		default:
+			// Root is not an array, count as 1
+			return 1, nil
+		}
+	}
+
+	var nodeset interface{}
+	if strings.HasPrefix(arg, "@.") {
+		nodeset, _ = filter_get_from_explicit_path(obj, arg)
+	} else if strings.HasPrefix(arg, "$.") {
+		nodeset, _ = filter_get_from_explicit_path(root, arg)
+	} else {
+		// Literal string - treat as string length
+		return len(arg), nil
+	}
+
+	// Count nodes in the nodelist
+	if nodeset == nil {
+		return 0, nil
+	}
+	switch v := nodeset.(type) {
+	case []interface{}:
+		return len(v), nil
+	default:
+		// Single node, count as 1
+		return 1, nil
+	}
+}
+
+// eval_match evaluates match() function - regex with implicit anchoring (^pattern$)
+func eval_match(obj, root interface{}, args []string) (interface{}, error) {
+	if len(args) != 2 {
+		return nil, fmt.Errorf("match() requires 2 arguments (string, pattern), got %d", len(args))
+	}
+
+	// Get the string value
+	var strVal string
+	if strings.HasPrefix(args[0], "@.") {
+		v, err := filter_get_from_explicit_path(obj, args[0])
+		if err != nil {
+			return nil, err
+		}
+		if v == nil {
+			return false, nil
+		}
+		strVal = fmt.Sprintf("%v", v)
+	} else if strings.HasPrefix(args[0], "$.") {
+		v, err := filter_get_from_explicit_path(root, args[0])
+		if err != nil {
+			return nil, err
+		}
+		if v == nil {
+			return false, nil
+		}
+		strVal = fmt.Sprintf("%v", v)
+	} else {
+		strVal = args[0]
+	}
+
+	// Get the pattern (remove quotes if present)
+	pattern := args[1]
+	pattern = strings.Trim(pattern, `"'`)
+
+	// Compile regex with implicit anchoring (^pattern$)
+	re, err := regexp.Compile("^" + pattern + "$")
+	if err != nil {
+		return nil, fmt.Errorf("invalid regex pattern: %v", err)
+	}
+
+	return re.MatchString(strVal), nil
+}
+
+// eval_search evaluates search() function - regex without anchoring
+func eval_search(obj, root interface{}, args []string) (interface{}, error) {
+	if len(args) != 2 {
+		return nil, fmt.Errorf("search() requires 2 arguments (string, pattern), got %d", len(args))
+	}
+
+	// Get the string value
+	var strVal string
+	if strings.HasPrefix(args[0], "@.") {
+		v, err := filter_get_from_explicit_path(obj, args[0])
+		if err != nil {
+			return nil, err
+		}
+		if v == nil {
+			return false, nil
+		}
+		strVal = fmt.Sprintf("%v", v)
+	} else if strings.HasPrefix(args[0], "$.") {
+		v, err := filter_get_from_explicit_path(root, args[0])
+		if err != nil {
+			return nil, err
+		}
+		if v == nil {
+			return false, nil
+		}
+		strVal = fmt.Sprintf("%v", v)
+	} else {
+		strVal = args[0]
+	}
+
+	// Get the pattern (remove quotes if present)
+	pattern := args[1]
+	pattern = strings.Trim(pattern, `"'`)
+
+	// Compile regex without anchoring
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, fmt.Errorf("invalid regex pattern: %v", err)
+	}
+
+	return re.MatchString(strVal), nil
+}
+
+// eval_length evaluates length() function in filter context
+func eval_length(obj, root interface{}, args []string) (interface{}, error) {
+	if len(args) != 1 {
+		return nil, fmt.Errorf("length() requires 1 argument, got %d", len(args))
+	}
+
+	var val interface{}
+	if strings.HasPrefix(args[0], "@.") {
+		val, _ = filter_get_from_explicit_path(obj, args[0])
+	} else if strings.HasPrefix(args[0], "$.") {
+		val, _ = filter_get_from_explicit_path(root, args[0])
+	} else {
+		val = args[0]
+	}
+
+	return get_length(val)
+}
+
 func eval_filter(obj, root interface{}, lp, op, rp string) (res bool, err error) {
 	lp_v, err := get_lp_v(obj, root, lp)
 
+	// If op is empty, treat it as an exists check (truthy check)
+	if op == "" {
+		op = "exists"
+	}
+
 	if op == "exists" {
+		// If lp_v is a function call (contains parentheses), evaluate it
+		// and return the boolean result
+		if strings.HasSuffix(lp, ")") {
+			// It's a function call, get_lp_v should have evaluated it
+			// and returned the result (which could be bool, int, etc.)
+			switch v := lp_v.(type) {
+			case bool:
+				return v, nil
+			case int, int8, int16, int32, int64, float32, float64:
+				// Non-zero values are truthy
+				return v != 0, nil
+			default:
+				// For other types, check if not nil
+				return lp_v != nil, nil
+			}
+		}
 		return lp_v != nil, nil
 	} else if op == "=~" {
 		return false, fmt.Errorf("not implemented yet")
