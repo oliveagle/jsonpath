@@ -277,11 +277,47 @@ func Test_jsonpath_JsonPathLookup_filter(t *testing.T) {
 
 	res, err = JsonPathLookup(json_data, "$.store.book[?(@.price > 10)]")
 	t.Log(err, res)
+	if res_v, ok := res.([]interface{}); !ok {
+		t.Errorf("expected: []interface{}, received: %v", res)
+	} else {
+		if len(res_v) != 2 {
+			t.Errorf("length of result should be 2, but actual length is %d: %v", len(res_v), res_v)
+		} else {
+			prices := []interface{}{res_v[0].(map[string]interface{})["price"], res_v[1].(map[string]interface{})["price"]}
+			if prices[0] != 12.99 || prices[1] != 22.99 {
+				t.Errorf("expected book prices: [12.99, 22.99] but received: %v, result: %v", prices, res_v)
+			}
+		}
+	}
 
 	res, err = JsonPathLookup(json_data, "$.store.book[?(@.price > $.expensive)].price")
 	t.Log(err, res)
+	if res_v, ok := res.([]interface{}); ok != true {
+		t.Errorf("expected: []interface{}, received: %v", res)
+	} else {
+		if len(res_v) != 2 {
+			t.Errorf("length of result should be 2, but actual length is %d: %v", len(res_v), res_v)
+		} else {
+			if res_v[0].(float64) != 12.99 || res_v[1].(float64) != 22.99 {
+				t.Errorf("expected result: [12.99, 22.99] but received: %v", res_v)
+			}
+		}
+	}
+
 	res, err = JsonPathLookup(json_data, "$.store.book[?(@.price < $.expensive)].price")
 	t.Log(err, res)
+	if res_v, ok := res.([]interface{}); ok != true {
+		t.Errorf("expected: []Goods, received: %v", res)
+	} else {
+		if len(res_v) != 2 {
+			t.Errorf("length of result should be 2, but actual length is %d: %v", len(res_v), res_v)
+		} else {
+			prices := []float64{res_v[0].(float64), res_v[1].(float64)}
+			if prices[0] != 8.95 || prices[1] != 8.99 {
+				t.Errorf("expected result: [8.95, 8.99] but received: %v", prices)
+			}
+		}
+	}
 }
 
 func Test_jsonpath_JsonPathLookup_struct_filter(t *testing.T) {

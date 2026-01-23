@@ -68,7 +68,11 @@ func (c *Compiled) String() string {
 }
 
 func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
-	var err error
+	var (
+		err  error
+		root = obj
+	)
+
 	for _, s := range c.steps {
 		// "key", "idx"
 		switch s.op {
@@ -128,7 +132,7 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 			if err != nil {
 				return nil, err
 			}
-			obj, err = get_filtered(obj, obj, s.args.(string))
+			obj, err = get_filtered(obj, root, s.args.(string))
 			if err != nil {
 				return nil, err
 			}
