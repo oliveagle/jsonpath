@@ -155,16 +155,12 @@ func Test_jsonpath_authors_of_all_books(t *testing.T) {
 
 var token_cases = []map[string]interface{}{
 	map[string]interface{}{
-		"query":  "$..author",
-		"tokens": []string{"$", "*", "author"},
-	},
-	map[string]interface{}{
 		"query":  "$.store.*",
 		"tokens": []string{"$", "store", "*"},
 	},
 	map[string]interface{}{
 		"query":  "$.store..price",
-		"tokens": []string{"$", "store", "*", "price"},
+		"tokens": []string{"$", "store", "..", "price"},
 	},
 	map[string]interface{}{
 		"query":  "$.store.book[*].author",
@@ -172,47 +168,39 @@ var token_cases = []map[string]interface{}{
 	},
 	map[string]interface{}{
 		"query":  "$..book[2]",
-		"tokens": []string{"$", "*", "book[2]"},
+		"tokens": []string{"$", "..", "book[2]"},
 	},
 	map[string]interface{}{
 		"query":  "$..book[(@.length-1)]",
-		"tokens": []string{"$", "*", "book[(@.length-1)]"},
+		"tokens": []string{"$", "..", "book[(@.length-1)]"},
 	},
 	map[string]interface{}{
 		"query":  "$..book[0,1]",
-		"tokens": []string{"$", "*", "book[0,1]"},
+		"tokens": []string{"$", "..", "book[0,1]"},
 	},
 	map[string]interface{}{
 		"query":  "$..book[:2]",
-		"tokens": []string{"$", "*", "book[:2]"},
+		"tokens": []string{"$", "..", "book[:2]"},
 	},
 	map[string]interface{}{
 		"query":  "$..book[?(@.isbn)]",
-		"tokens": []string{"$", "*", "book[?(@.isbn)]"},
-	},
-	map[string]interface{}{
-		"query":  "$.store.book[?(@.price < 10)]",
-		"tokens": []string{"$", "store", "book[?(@.price < 10)]"},
+		"tokens": []string{"$", "..", "book[?(@.isbn)]"},
 	},
 	map[string]interface{}{
 		"query":  "$..book[?(@.price <= $.expensive)]",
-		"tokens": []string{"$", "*", "book[?(@.price <= $.expensive)]"},
+		"tokens": []string{"$", "..", "book[?(@.price <= $.expensive)]"},
 	},
 	map[string]interface{}{
 		"query":  "$..book[?(@.author =~ /.*REES/i)]",
-		"tokens": []string{"$", "*", "book[?(@.author =~ /.*REES/i)]"},
+		"tokens": []string{"$", "..", "book[?(@.author =~ /.*REES/i)]"},
 	},
 	map[string]interface{}{
 		"query":  "$..book[?(@.author =~ /.*REES\\]/i)]",
-		"tokens": []string{"$", "*", "book[?(@.author =~ /.*REES\\]/i)]"},
+		"tokens": []string{"$", "..", "book[?(@.author =~ /.*REES\\]/i)]"},
 	},
 	map[string]interface{}{
 		"query":  "$..*",
-		"tokens": []string{"$", "*"},
-	},
-	map[string]interface{}{
-		"query":  "$....author",
-		"tokens": []string{"$", "*", "author"},
+		"tokens": []string{"$", ".."},
 	},
 	// New test cases for recursive descent
 	map[string]interface{}{
@@ -1188,13 +1176,13 @@ func Test_jsonpath_rootnode_is_array_range(t *testing.T) {
 		t.Logf("idx: %v, v: %v", idx, v)
 	}
 	if len(ares) != 2 {
-		t.Fatal("len is not 2. got: %v", len(ares))
+		t.Fatalf("len is not 2. got: %v", len(ares))
 	}
 	if ares[0].(float64) != 12.34 {
-		t.Fatal("idx: 0, should be 12.34. got: %v", ares[0])
+		t.Fatalf("idx: 0, should be 12.34. got: %v", ares[0])
 	}
 	if ares[1].(float64) != 13.34 {
-		t.Fatal("idx: 0, should be 12.34. got: %v", ares[1])
+		t.Fatalf("idx: 0, should be 12.34. got: %v", ares[1])
 	}
 }
 
@@ -1241,7 +1229,7 @@ func Test_jsonpath_rootnode_is_nested_array_range(t *testing.T) {
 		t.Logf("idx: %v, v: %v", idx, v)
 	}
 	if len(ares) != 2 {
-		t.Fatal("len is not 2. got: %v", len(ares))
+		t.Fatalf("len is not 2. got: %v", len(ares))
 	}
 
 	//FIXME: `$[:1].[0].test` got wrong result

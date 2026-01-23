@@ -216,12 +216,18 @@ func tokenize(query string) ([]string, error) {
 			token = token[1:]
 			if token != "*" {
 				tokens = append(tokens, token[:])
+			} else if len(tokens) > 0 && tokens[len(tokens)-1] == ".." {
+				// $..* means recursive descent with scan, * is redundant after ..
+				// Don't add * as separate token
 			} else if tokens[len(tokens)-1] != "*" {
 				tokens = append(tokens, token[:])
 			}
 		} else {
 			if token != "*" {
 				tokens = append(tokens, token[:])
+			} else if len(tokens) > 0 && tokens[len(tokens)-1] == ".." {
+				// $..* means recursive descent with scan, * is redundant after ..
+				// Don't add * as separate token
 			} else if tokens[len(tokens)-1] != "*" {
 				tokens = append(tokens, token[:])
 			}
