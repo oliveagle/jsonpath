@@ -99,7 +99,7 @@ given these example data.
     "expensive": 10
 }
 ```
-example json path syntax.
+Example json path syntax
 ----
 
 | jsonpath | result|
