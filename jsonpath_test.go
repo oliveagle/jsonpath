@@ -1511,3 +1511,63 @@ func BenchmarkCompileAndLookup(b *testing.B) {
 		c.Lookup(data)
 	}
 }
+
+// Issue #40: [*] over objects returns an error
+// https://github.com/oliveagle/jsonpath/issues/40
+func Test_jsonpath_wildcard_over_object(t *testing.T) {
+	input := map[string]interface{}{
+		"a": map[string]interface{}{
+			"foo": map[string]interface{}{
+				"b": 1,
+			},
+		},
+	}
+
+	// Test $.a[*].b - wildcard on nested map should return values
+	res, err := JsonPathLookup(input, "$.a[*].b")
+	if err != nil {
+		t.Fatalf("$.a[*].b failed: %v", err)
+	}
+	resSlice, ok := res.([]interface{})
+	if !ok {
+		t.Fatalf("Expected []interface{}, got %T", res)
+	}
+	if len(resSlice) != 1 {
+		t.Errorf("Expected 1 result, got %d: %v", len(resSlice), resSlice)
+	}
+
+	// Test $.a[*] - wildcard should return map values
+	res2, err2 := JsonPathLookup(input, "$.a[*]")
+	if err2 != nil {
+		t.Fatalf("$.a[*] failed: %v", err2)
+	}
+	resSlice2, ok2 := res2.([]interface{})
+	if !ok2 {
+		t.Fatalf("Expected []interface{}, got %T", res2)
+	}
+	if len(resSlice2) != 1 {
+		t.Errorf("Expected 1 result, got %d", len(resSlice2))
+	}
+}
+
+// Issue #43: root jsonpath filter on array
+// https://github.com/oliveagle/jsonpath/issues/43
+func Test_jsonpath_root_array_filter(t *testing.T) {
+	input := []interface{}{
+		map[string]interface{}{"name": "John", "age": 30},
+		map[string]interface{}{"name": "Jane", "age": 25},
+	}
+
+	// Test $[?(@.age == 30)] on root array
+	res, err := JsonPathLookup(input, "$[?(@.age == 30)]")
+	if err != nil {
+		t.Fatalf("$[?(@.age == 30)] failed: %v", err)
+	}
+	resSlice, ok := res.([]interface{})
+	if !ok {
+		t.Fatalf("Expected []interface{}, got %T", res)
+	}
+	if len(resSlice) != 1 {
+		t.Errorf("Expected 1 result, got %d: %v", len(resSlice), resSlice)
+	}
+}

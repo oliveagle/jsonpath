@@ -491,6 +491,20 @@ func get_range(obj, frm, to interface{}) (interface{}, error) {
 		//fmt.Println("_frm, _to: ", _frm, _to)
 		res_v := reflect.ValueOf(obj).Slice(_frm, _to)
 		return res_v.Interface(), nil
+	case reflect.Map:
+		// For wildcard [*] on maps, return all values
+		var res []interface{}
+		if jsonMap, ok := obj.(map[string]interface{}); ok {
+			for _, v := range jsonMap {
+				res = append(res, v)
+			}
+			return res, nil
+		}
+		keys := reflect.ValueOf(obj).MapKeys()
+		for _, k := range keys {
+			res = append(res, reflect.ValueOf(obj).MapIndex(k).Interface())
+		}
+		return res, nil
 	default:
 		return nil, fmt.Errorf("object is not Slice")
 	}
