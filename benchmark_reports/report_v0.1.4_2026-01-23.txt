@@ -14,24 +14,24 @@ goos: linux
 goarch: amd64
 pkg: github.com/oliveagle/jsonpath
 cpu: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S          
-BenchmarkJsonPathLookupCompiled-32            	37949784	        33.22 ns/op	       0 B/op	       0 allocs/op
-BenchmarkJsonPathLookup-32                    	 1790986	       656.8 ns/op	     568 B/op	      47 allocs/op
-BenchmarkJsonPathLookup_0-32                  	 3883826	       319.6 ns/op	     272 B/op	      24 allocs/op
-BenchmarkJsonPathLookup_1-32                  	 1769760	       660.2 ns/op	     568 B/op	      47 allocs/op
-BenchmarkJsonPathLookup_2-32                  	 1764420	       688.4 ns/op	     584 B/op	      49 allocs/op
-BenchmarkJsonPathLookup_3-32                  	 1399461	       854.4 ns/op	     776 B/op	      58 allocs/op
-BenchmarkJsonPathLookup_4-32                  	 1397005	       847.1 ns/op	     784 B/op	      55 allocs/op
-BenchmarkJsonPathLookup_5-32                  	  580200	      1990 ns/op	    1426 B/op	     132 allocs/op
-BenchmarkJsonPathLookup_6-32                  	  103155	     11126 ns/op	   15265 B/op	     348 allocs/op
-BenchmarkJsonPathLookup_7-32                  	  105057	     11754 ns/op	   15656 B/op	     450 allocs/op
-BenchmarkJsonPathLookup_8-32                  	 1417425	       852.9 ns/op	     832 B/op	      53 allocs/op
-BenchmarkJsonPathLookup_9-32                  	  127702	      9187 ns/op	   14166 B/op	     334 allocs/op
-BenchmarkJsonPathLookup_10-32                 	  237423	      4841 ns/op	    3801 B/op	     225 allocs/op
-BenchmarkJsonPathLookup_Simple-32             	 1802791	       678.9 ns/op	     568 B/op	      49 allocs/op
-BenchmarkJsonPathLookup_Filter-32             	  180550	      6578 ns/op	    9711 B/op	     227 allocs/op
-BenchmarkJsonPathLookup_Range-32              	 1392705	       848.5 ns/op	     784 B/op	      55 allocs/op
-BenchmarkJsonPathLookup_Recursive-32          	  765715	      1573 ns/op	    1850 B/op	      65 allocs/op
-BenchmarkJsonPathLookup_RootArrayFilter-32    	  227250	      5339 ns/op	    9086 B/op	     169 allocs/op
-BenchmarkCompileAndLookup-32                  	  252385	      4837 ns/op	    6778 B/op	     182 allocs/op
+BenchmarkJsonPathLookupCompiled-32            	36359330	        31.99 ns/op	       0 B/op	       0 allocs/op
+BenchmarkJsonPathLookup-32                    	 1821573	       646.8 ns/op	     568 B/op	      47 allocs/op
+BenchmarkJsonPathLookup_0-32                  	 3896986	       306.5 ns/op	     272 B/op	      24 allocs/op
+BenchmarkJsonPathLookup_1-32                  	 1845213	       646.7 ns/op	     568 B/op	      47 allocs/op
+BenchmarkJsonPathLookup_2-32                  	 1746720	       690.4 ns/op	     584 B/op	      49 allocs/op
+BenchmarkJsonPathLookup_3-32                  	 1390687	       871.5 ns/op	     776 B/op	      58 allocs/op
+BenchmarkJsonPathLookup_4-32                  	 1465840	       819.5 ns/op	     720 B/op	      54 allocs/op
+BenchmarkJsonPathLookup_5-32                  	  610078	      1963 ns/op	    1426 B/op	     132 allocs/op
+BenchmarkJsonPathLookup_6-32                  	  104545	     11399 ns/op	   15265 B/op	     348 allocs/op
+BenchmarkJsonPathLookup_7-32                  	  101858	     12121 ns/op	   15657 B/op	     450 allocs/op
+BenchmarkJsonPathLookup_8-32                  	 1421365	       842.6 ns/op	     832 B/op	      53 allocs/op
+BenchmarkJsonPathLookup_9-32                  	  130424	      9335 ns/op	   14167 B/op	     334 allocs/op
+BenchmarkJsonPathLookup_10-32                 	  254862	      4849 ns/op	    3798 B/op	     225 allocs/op
+BenchmarkJsonPathLookup_Simple-32             	 1749598	       677.6 ns/op	     568 B/op	      49 allocs/op
+BenchmarkJsonPathLookup_Filter-32             	  191222	      6651 ns/op	    9711 B/op	     227 allocs/op
+BenchmarkJsonPathLookup_Range-32              	 1486112	       811.5 ns/op	     720 B/op	      54 allocs/op
+BenchmarkJsonPathLookup_Recursive-32          	  755653	      1576 ns/op	    1850 B/op	      65 allocs/op
+BenchmarkJsonPathLookup_RootArrayFilter-32    	  222148	      5345 ns/op	    9086 B/op	     169 allocs/op
+BenchmarkCompileAndLookup-32                  	  249117	      4963 ns/op	    6778 B/op	     182 allocs/op
 PASS
-ok  	github.com/oliveagle/jsonpath	29.890s
+ok  	github.com/oliveagle/jsonpath	30.852s

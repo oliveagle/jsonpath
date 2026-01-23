@@ -466,7 +466,7 @@ func get_range(obj, frm, to interface{}) (interface{}, error) {
 			frm = 0
 		}
 		if to == nil {
-			to = length - 1
+			to = length
 		}
 		if fv, ok := frm.(int); ok == true {
 			if fv < 0 {
@@ -479,14 +479,18 @@ func get_range(obj, frm, to interface{}) (interface{}, error) {
 			if tv < 0 {
 				_to = length + tv + 1
 			} else {
-				_to = tv + 1
+				_to = tv
 			}
 		}
 		if _frm < 0 || _frm >= length {
 			return nil, fmt.Errorf("index [from] out of range: len: %v, from: %v", length, frm)
 		}
-		if _to < 0 || _to > length {
-			return nil, fmt.Errorf("index [to] out of range: len: %v, to: %v", length, to)
+		// Clamp _to to valid range [0, length] per RFC 9535
+		if _to < 0 {
+			_to = 0
+		}
+		if _to > length {
+			_to = length
 		}
 		//fmt.Println("_frm, _to: ", _frm, _to)
 		res_v := reflect.ValueOf(obj).Slice(_frm, _to)

@@ -115,18 +115,18 @@ func Test_jsonpath_JsonPathLookup_1(t *testing.T) {
 		t.Errorf("exp: [8.95, 12.99, 8.99, 22.99], got: %v", res)
 	}
 
-	// range
+	// range - RFC 9535: end is exclusive, so [0:1] returns only element 0
 	res, err = JsonPathLookup(json_data, "$.store.book[0:1].price")
 	t.Log(err, res)
-	if res_v, ok := res.([]interface{}); ok != true || res_v[0].(float64) != 8.95 || res_v[1].(float64) != 12.99 {
-		t.Errorf("exp: [8.95, 12.99], got: %v", res)
+	if res_v, ok := res.([]interface{}); ok != true || res_v[0].(float64) != 8.95 || len(res_v) != 1 {
+		t.Errorf("exp: [8.95], got: %v", res)
 	}
 
-	// range
+	// range - RFC 9535: end is exclusive, so [0:1] returns only element 0
 	res, err = JsonPathLookup(json_data, "$.store.book[0:1].title")
 	t.Log(err, res)
 	if res_v, ok := res.([]interface{}); ok != true {
-		if res_v[0].(string) != "Sayings of the Century" || res_v[1].(string) != "Sword of Honour" {
+		if res_v[0].(string) != "Sayings of the Century" || len(res_v) != 1 {
 			t.Errorf("title are wrong: %v", res)
 		}
 	}
@@ -1270,18 +1270,16 @@ func Test_jsonpath_rootnode_is_array_range(t *testing.T) {
 	if res == nil {
 		t.Fatal("res is nil")
 	}
+	// RFC 9535: end is exclusive, so [:1] returns only first element
 	ares := res.([]interface{})
 	for idx, v := range ares {
 		t.Logf("idx: %v, v: %v", idx, v)
 	}
-	if len(ares) != 2 {
-		t.Fatalf("len is not 2. got: %v", len(ares))
+	if len(ares) != 1 {
+		t.Fatalf("len is not 1. got: %v", len(ares))
 	}
 	if ares[0].(float64) != 12.34 {
 		t.Fatalf("idx: 0, should be 12.34. got: %v", ares[0])
-	}
-	if ares[1].(float64) != 13.34 {
-		t.Fatalf("idx: 0, should be 12.34. got: %v", ares[1])
 	}
 }
 
@@ -1425,7 +1423,7 @@ func BenchmarkJsonPathLookup_Simple(b *testing.B) {
 			},
 		},
 	}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		JsonPathLookup(data, "$.store.book[0].author")
@@ -1442,7 +1440,7 @@ func BenchmarkJsonPathLookup_Filter(b *testing.B) {
 			},
 		},
 	}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		JsonPathLookup(data, "$.store.book[?(@.price > 15)].author")
@@ -1459,7 +1457,7 @@ func BenchmarkJsonPathLookup_Range(b *testing.B) {
 			},
 		},
 	}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		JsonPathLookup(data, "$.store.book[0:2].price")
@@ -1475,7 +1473,7 @@ func BenchmarkJsonPathLookup_Recursive(b *testing.B) {
 			},
 		},
 	}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		JsonPathLookup(data, "$..author")
@@ -1488,7 +1486,7 @@ func BenchmarkJsonPathLookup_RootArrayFilter(b *testing.B) {
 		map[string]interface{}{"name": "Jane", "age": 25},
 		map[string]interface{}{"name": "Bob", "age": 35},
 	}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		JsonPathLookup(data, "$[?(@.age > 25)]")
@@ -1504,7 +1502,7 @@ func BenchmarkCompileAndLookup(b *testing.B) {
 			},
 		},
 	}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		c, _ := Compile("$.store.book[?(@.price > 10)].author")
@@ -1569,5 +1567,106 @@ func Test_jsonpath_root_array_filter(t *testing.T) {
 	}
 	if len(resSlice) != 1 {
 		t.Errorf("Expected 1 result, got %d: %v", len(resSlice), resSlice)
+	}
+}
+
+// Issue #27: Range syntax doesn't match RFC 9535
+// https://github.com/oliveagle/jsonpath/issues/27
+func Test_jsonpath_range_syntax_rfc9535(t *testing.T) {
+	// Test case 1: $[1:10] on small array should not error
+	arr1 := []interface{}{"first", "second", "third"}
+	res, err := JsonPathLookup(arr1, "$[1:10]")
+	if err != nil {
+		t.Fatalf("$[1:10] failed: %v", err)
+	}
+	resSlice, ok := res.([]interface{})
+	if !ok {
+		t.Fatalf("Expected []interface{}, got %T", res)
+	}
+	if len(resSlice) != 2 {
+		t.Errorf("Expected 2 elements, got %d: %v", len(resSlice), resSlice)
+	}
+	if resSlice[0] != "second" || resSlice[1] != "third" {
+		t.Errorf("Expected [second, third], got %v", resSlice)
+	}
+
+	// Test case 2: $[:2] should return first 2 elements (exclusive end)
+	arr2 := []interface{}{1, 2, 3, 4, 5}
+	res, err = JsonPathLookup(arr2, "$[:2]")
+	if err != nil {
+		t.Fatalf("$[:2] failed: %v", err)
+	}
+	resSlice, ok = res.([]interface{})
+	if !ok {
+		t.Fatalf("Expected []interface{}, got %T", res)
+	}
+	if len(resSlice) != 2 {
+		t.Errorf("Expected 2 elements, got %d: %v", len(resSlice), resSlice)
+	}
+	if resSlice[0].(int) != 1 || resSlice[1].(int) != 2 {
+		t.Errorf("Expected [1, 2], got %v", resSlice)
+	}
+
+	// Test case 3: $[2:] should return elements from index 2 onwards
+	res, err = JsonPathLookup(arr2, "$[2:]")
+	if err != nil {
+		t.Fatalf("$[2:] failed: %v", err)
+	}
+	resSlice, ok = res.([]interface{})
+	if !ok {
+		t.Fatalf("Expected []interface{}, got %T", res)
+	}
+	if len(resSlice) != 3 {
+		t.Errorf("Expected 3 elements, got %d: %v", len(resSlice), resSlice)
+	}
+	if resSlice[0].(int) != 3 || resSlice[1].(int) != 4 || resSlice[2].(int) != 5 {
+		t.Errorf("Expected [3, 4, 5], got %v", resSlice)
+	}
+
+	// Test case 4: $[:-1] should include elements up to last (RFC 9535: -1 = last element)
+	res, err = JsonPathLookup(arr2, "$[:-1]")
+	if err != nil {
+		t.Fatalf("$[:-1] failed: %v", err)
+	}
+	resSlice, ok = res.([]interface{})
+	if !ok {
+		t.Fatalf("Expected []interface{}, got %T", res)
+	}
+	// RFC 9535: -1 means last element, slice end is exclusive
+	// So [:-1] returns elements from 0 to (last - 1), which is all elements in this case
+	if len(resSlice) != 5 {
+		t.Errorf("Expected 5 elements, got %d: %v", len(resSlice), resSlice)
+	}
+
+	// Test case 5: $[-2:] should return last 2 elements
+	res, err = JsonPathLookup(arr2, "$[-2:]")
+	if err != nil {
+		t.Fatalf("$[-2:] failed: %v", err)
+	}
+	resSlice, ok = res.([]interface{})
+	if !ok {
+		t.Fatalf("Expected []interface{}, got %T", res)
+	}
+	if len(resSlice) != 2 {
+		t.Errorf("Expected 2 elements, got %d: %v", len(resSlice), resSlice)
+	}
+	if resSlice[0].(int) != 4 || resSlice[1].(int) != 5 {
+		t.Errorf("Expected [4, 5], got %v", resSlice)
+	}
+
+	// Test case 6: $[1:4] should return elements at indices 1, 2, 3
+	res, err = JsonPathLookup(arr2, "$[1:4]")
+	if err != nil {
+		t.Fatalf("$[1:4] failed: %v", err)
+	}
+	resSlice, ok = res.([]interface{})
+	if !ok {
+		t.Fatalf("Expected []interface{}, got %T", res)
+	}
+	if len(resSlice) != 3 {
+		t.Errorf("Expected 3 elements, got %d: %v", len(resSlice), resSlice)
+	}
+	if resSlice[0].(int) != 2 || resSlice[1].(int) != 3 || resSlice[2].(int) != 4 {
+		t.Errorf("Expected [2, 3, 4], got %v", resSlice)
 	}
 }
