@@ -18,7 +18,7 @@ Get Started
 go get github.com/oliveagle/jsonpath
 ```
 
-example code:
+Example code:
 
 ```go
 import (
@@ -42,23 +42,23 @@ referenced from github.com/jayway/JsonPath
 
 | Operator | Supported | Description |
 | ---- | :---: | ---------- |
-| $ 					  | Y | The root element to query. This starts all path expressions. |
-| @ 				      | Y | The current node being processed by a filter predicate. |
-| * 					  | Y | Wildcard. Available anywhere a name or numeric are required. |
-| .. 					  | Y | Deep scan. Available anywhere a name is required. |
-| .<name> 				  | Y | Dot-notated child |
-| ['<name>' (, '<name>')] | X | Bracket-notated child or children |
-| [<number> (, <number>)] | Y | Array index or indexes |
-| [start:end] 			  | Y | Array slice operator (end is exclusive per RFC 9535) |
-| [?(<expression>)] 	  | Y | Filter expression. Expression must evaluate to a boolean value. |
-| length() 				  | Y | RFC 9535 function: returns length of array, string, or map |
-| count() 				  | Y | RFC 9535 function: returns count of items in array |
-| match() 				  | Y | RFC 9535 function: regex match with implicit anchoring (^pattern$) |
-| search() 				  | Y | RFC 9535 function: regex search without anchoring |
+| `$` | Y | The root element to query. This starts all path expressions. |
+| `@` | Y | The current node being processed by a filter predicate. |
+| `*` | Y | Wildcard. Available anywhere a name or numeric are required. |
+| `..` | Y | Deep scan. Available anywhere a name is required. |
+| `.<name>` | Y | Dot-notated child |
+| `['<name>' (, '<name>')]` | X | Bracket-notated child or children |
+| `[<number> (, <number>)]` | Y | Array index or indexes |
+| `[start:end]` | Y | Array slice operator (end is exclusive per RFC 9535) |
+| `[?(<expression>)]` | Y | Filter expression. Expression must evaluate to a boolean value. |
+| `length()` | Y | RFC 9535 function: returns length of array, string, or map |
+| `count()` | Y | RFC 9535 function: returns count of items in array |
+| `match()` | Y | RFC 9535 function: regex match with implicit anchoring (`^pattern$`) |
+| `search()` | Y | RFC 9535 function: regex search without anchoring |
 
 Examples
 --------
-given these example data.
+Given these example data.
 
 ```javascript
 {
@@ -99,28 +99,29 @@ given these example data.
     "expensive": 10
 }
 ```
+
 Example json path syntax
 ----
 
-| jsonpath | result|
+| jsonpath | result |
 | :--------- | :-------|
-| $.expensive 			                           | 10|
-| $.store.book[0].price                            | 8.95|
-| $.store.book[-1].isbn                            | "0-395-19395-8"|
-| $.store.book[0,1].price                          | [8.95, 12.99]   |
-| $.store.book[0:2].price                          | [8.95, 12.99] (slice end is exclusive)|
-| $.store.book[?(@.isbn)].price                    |  [8.99, 22.99] |
-| $.store.book[?(@.price > 10)].title              | ["Sword of Honour", "The Lord of the Rings"]|
-| $.store.book[?(@.price < $.expensive)].price     | [8.95, 8.99] |
-| $.store.book[:].price                            | [8.95, 12.99, 8.99, 22.99] |
-| $.store.book[?(@.author =~ /(?i).*REES/)].author | "Nigel Rees" |
-| $..author                                        | ["Nigel Rees", "Evelyn Waugh", "Herman Melville", "J. R. R. Tolkien"] |
-| $.store.book[*].price                            | [8.95, 12.99, 8.99, 22.99] |
+| `$.expensive` | 10 |
+| `$.store.book[0].price` | 8.95 |
+| `$.store.book[-1].isbn` | "0-395-19395-8" |
+| `$.store.book[0,1].price` | [8.95, 12.99] |
+| `$.store.book[0:2].price` | [8.95, 12.99] (slice end is exclusive) |
+| `$.store.book[?(@.isbn)].price` | [8.99, 22.99] |
+| `$.store.book[?(@.price > 10)].title` | ["Sword of Honour", "The Lord of the Rings"] |
+| `$.store.book[?(@.price < $.expensive)].price` | [8.95, 8.99] |
+| `$.store.book[:].price` | [8.95, 12.99, 8.99, 22.99] |
+| `$.store.book[?(@.author =~ /(?i).*REES/)].author` | "Nigel Rees" |
+| `$..author` | ["Nigel Rees", "Evelyn Waugh", "Herman Melville", "J. R. R. Tolkien"] |
+| `$.store.book[*].price` | [8.95, 12.99, 8.99, 22.99] |
 
 > Note: golang support regular expression flags in form of `(?imsU)pattern`
 >
 > RFC 9535 functions supported:
 > - `length()` - returns length of array, string, or map
 > - `count()` - returns count of items in array (used in filter expressions)
-> - `match()` - regex match with implicit anchoring (^pattern$)
+> - `match()` - regex match with implicit anchoring (`^pattern$`)
 > - `search()` - regex search without anchoring
