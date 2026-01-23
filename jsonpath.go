@@ -68,12 +68,8 @@ func (c *Compiled) String() string {
 }
 
 func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
-	var (
-		err  error
-		root = obj
-	)
-
-	for _, s := range c.steps {
+	var err error
+	for i, s := range c.steps {
 		// "key", "idx"
 		switch s.op {
 		case "key":
@@ -88,9 +84,6 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 				if err != nil {
 					return nil, err
 				}
-			}
-			if obj == nil {
-				return nil, nil
 			}
 
 			if len(s.args.([]int)) > 1 {
@@ -122,9 +115,6 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 					return nil, err
 				}
 			}
-			if obj == nil {
-				return nil, nil
-			}
 			if argsv, ok := s.args.([2]interface{}); ok == true {
 				obj, err = get_range(obj, argsv[0], argsv[1])
 				if err != nil {
@@ -138,9 +128,27 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 			if err != nil {
 				return nil, err
 			}
-			obj, err = get_filtered(obj, root, s.args.(string))
+			obj, err = get_filtered(obj, obj, s.args.(string))
 			if err != nil {
 				return nil, err
+			}
+		case "recursive":
+			obj = getAllDescendants(obj)
+			// Heuristic: if next step is key, exclude slices from candidates to avoid double-matching
+			// (once as container via implicit map, once as individual elements)
+			if i+1 < len(c.steps) && c.steps[i+1].op == "key" {
+				if candidates, ok := obj.([]interface{}); ok {
+					filtered := []interface{}{}
+					for _, cand := range candidates {
+						// Filter out Slices (but keep Maps and others)
+						// because get_key on Slice iterates children, which are already in candidates
+						v := reflect.ValueOf(cand)
+						if v.Kind() != reflect.Slice {
+							filtered = append(filtered, cand)
+						}
+					}
+					obj = filtered
+				}
 			}
 		default:
 			return nil, fmt.Errorf("expression don't support in filter")
@@ -154,7 +162,6 @@ func tokenize(query string) ([]string, error) {
 	//	token_start := false
 	//	token_end := false
 	token := ""
-	open := 0
 
 	// fmt.Println("-------------------------------------------------- start")
 	for idx, x := range query {
@@ -172,8 +179,8 @@ func tokenize(query string) ([]string, error) {
 		if token == "." {
 			continue
 		} else if token == ".." {
-			if tokens[len(tokens)-1] != "*" {
-				tokens = append(tokens, "*")
+			if len(tokens) == 0 || tokens[len(tokens)-1] != ".." {
+				tokens = append(tokens, "..")
 			}
 			token = "."
 			continue
@@ -182,21 +189,13 @@ func tokenize(query string) ([]string, error) {
 			if strings.Contains(token, "[") {
 				// fmt.Println(" contains [ ")
 				if x == ']' && !strings.HasSuffix(token, "\\]") {
-					open--
-
-					if open == 0 {
-						if token[0] == '.' {
-							tokens = append(tokens, token[1:])
-						} else {
-							tokens = append(tokens, token[:])
-						}
-						token = ""
+					if token[0] == '.' {
+						tokens = append(tokens, token[1:])
+					} else {
+						tokens = append(tokens, token[:])
 					}
+					token = ""
 					continue
-				}
-
-				if x == '[' && !strings.HasSuffix(token, "\\[") {
-					open++
 				}
 			} else {
 				// fmt.Println(" doesn't contains [ ")
@@ -234,7 +233,7 @@ func tokenize(query string) ([]string, error) {
 }
 
 /*
- op: "root", "key", "idx", "range", "filter", "scan"
+op: "root", "key", "idx", "range", "filter", "scan"
 */
 func parse_token(token string) (op string, key string, args interface{}, err error) {
 	if token == "$" {
@@ -242,6 +241,9 @@ func parse_token(token string) (op string, key string, args interface{}, err err
 	}
 	if token == "*" {
 		return "scan", "*", nil, nil
+	}
+	if token == ".." {
+		return "recursive", "..", nil, nil
 	}
 
 	bracket_idx := strings.Index(token, "[")
@@ -354,8 +356,7 @@ func get_key(obj interface{}, key string) (interface{}, error) {
 	if reflect.TypeOf(obj) == nil {
 		return nil, ErrGetFromNullObj
 	}
-	value := reflect.ValueOf(obj)
-	switch value.Kind() {
+	switch reflect.TypeOf(obj).Kind() {
 	case reflect.Map:
 		// if obj came from stdlib json, its highly likely to be a map[string]interface{}
 		// in which case we can save having to iterate the map keys to work out if the
@@ -367,83 +368,23 @@ func get_key(obj interface{}, key string) (interface{}, error) {
 			}
 			return val, nil
 		}
-<<<<<<< HEAD
-		for _, kv := range value.MapKeys() {
-			// Support map[interface{}]interface{} with string key
-			if kv.Interface() == key {
-				return value.MapIndex(kv).Interface(), nil
-			}
+		for _, kv := range reflect.ValueOf(obj).MapKeys() {
+			//fmt.Println(kv.String())
 			if kv.String() == key {
-				return value.MapIndex(kv).Interface(), nil
-			}
-		}
-			if kv.String() == key {
-				return of.MapIndex(kv).Interface(), nil
->>>>>>> pr-24
+				return reflect.ValueOf(obj).MapIndex(kv).Interface(), nil
 			}
 		}
 		return nil, fmt.Errorf("key error: %s not found in object", key)
 	case reflect.Slice:
 		// slice we should get from all objects in it.
 		res := []interface{}{}
-		for i := 0; i < value.Len(); i++ {
+		for i := 0; i < reflect.ValueOf(obj).Len(); i++ {
 			tmp, _ := get_idx(obj, i)
-			if key == "" {
-				res = append(res, tmp)
-			} else {
-				if v, err := get_key(tmp, key); err == nil {
-					res = append(res, v)
-				}
+			if v, err := get_key(tmp, key); err == nil {
+				res = append(res, v)
 			}
 		}
 		return res, nil
-	case reflect.Ptr:
-		// Unwrap pointer
-		realValue := value.Elem()
-
-		if !realValue.IsValid() {
-			return nil, fmt.Errorf("null pointer")
-		}
-
-		return get_key(realValue.Interface(), key)
-	case reflect.Interface:
-		// Unwrap interface value
-		realValue := value.Elem()
-
-		return get_key(realValue.Interface(), key)
-	case reflect.Struct:
-		for i := 0; i < value.NumField(); i++ {
-			valueField := value.Field(i)
-			structField := value.Type().Field(i)
-
-			// Embeded struct
-			if valueField.Kind() == reflect.Struct && structField.Anonymous {
-				v, _ := get_key(valueField.Interface(), key)
-				if v != nil {
-					return v, nil
-				}
-			} else {
-				if structField.Name == key {
-					return valueField.Interface(), nil
-				}
-
-				if tag := structField.Tag.Get("json"); tag != "" {
-					values := strings.Split(tag, ",")
-					for _, tagValue := range values {
-						// In the following cases json tag names should not be checked:
-						// ",omitempty", "-", "-,"
-						if (tagValue == "" && len(values) == 2) || tagValue == "-" {
-							break
-						}
-						if tagValue != "omitempty" && tagValue == key {
-							return valueField.Interface(), nil
-						}
-					}
-				}
-			}
-		}
-
-		return nil, fmt.Errorf("key error: %s not found in struct", key)
 	default:
 		return nil, fmt.Errorf("object is not map")
 	}
@@ -545,11 +486,7 @@ func get_filtered(obj, root interface{}, filter string) ([]interface{}, error) {
 				tmp := reflect.ValueOf(obj).Index(i).Interface()
 				ok, err := eval_reg_filter(tmp, root, lp, pat)
 				if err != nil {
-					if strings.ContainsAny(err.Error(), "key error: & not found in object") {
-						continue
-					} else {
-						return nil, err
-					}
+					return nil, err
 				}
 				if ok == true {
 					res = append(res, tmp)
@@ -747,7 +684,7 @@ func eval_filter(obj, root interface{}, lp, op, rp string) (res bool, err error)
 		var rp_v interface{}
 		if strings.HasPrefix(rp, "@.") {
 			rp_v, err = filter_get_from_explicit_path(obj, rp)
-		} else if strings.HasPrefix(rp, "$.") || strings.HasPrefix(rp, "$[") {
+		} else if strings.HasPrefix(rp, "$.") {
 			rp_v, err = filter_get_from_explicit_path(root, rp)
 		} else {
 			rp_v = rp
@@ -803,4 +740,38 @@ func cmp_any(obj1, obj2 interface{}, op string) (bool, error) {
 	}
 
 	return false, nil
+}
+
+func getAllDescendants(obj interface{}) []interface{} {
+	res := []interface{}{}
+	var recurse func(curr interface{})
+	recurse = func(curr interface{}) {
+		res = append(res, curr)
+		v := reflect.ValueOf(curr)
+		if !v.IsValid() {
+			return
+		}
+
+		kind := v.Kind()
+		if kind == reflect.Ptr {
+			v = v.Elem()
+			if !v.IsValid() {
+				return
+			}
+			kind = v.Kind()
+		}
+
+		switch kind {
+		case reflect.Map:
+			for _, k := range v.MapKeys() {
+				recurse(v.MapIndex(k).Interface())
+			}
+		case reflect.Slice, reflect.Array:
+			for i := 0; i < v.Len(); i++ {
+				recurse(v.Index(i).Interface())
+			}
+		}
+	}
+	recurse(obj)
+	return res
 }
