@@ -14,8 +14,6 @@ import (
 	"reflect"
 	"regexp"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
 )
 
 var json_data interface{}
@@ -235,10 +233,21 @@ var token_cases = []map[string]interface{}{
 
 func Test_jsonpath_tokenize(t *testing.T) {
 	for _, tcase := range token_cases {
-		t.Run(tcase.query, func(t *testing.T) {
-			tokens, err := tokenize(tcase.query)
-			assert.NoError(t, err)
-			assert.Equal(t, tcase.expected, tokens)
+		query := tcase["query"].(string)
+		expected := tcase["tokens"].([]string)
+		t.Run(query, func(t *testing.T) {
+			tokens, err := tokenize(query)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if len(tokens) != len(expected) {
+				t.Errorf("expected %d tokens, got %d: %v", len(expected), len(tokens), tokens)
+			}
+			for i, token := range tokens {
+				if i < len(expected) && token != expected[i] {
+					t.Errorf("token[%d]: expected %q, got %q", i, expected[i], token)
+				}
+			}
 		})
 	}
 }
@@ -397,7 +406,7 @@ func Test_jsonpath_parse_token(t *testing.T) {
 
 		if op == "filter" {
 			if args_v, ok := args.(string); ok == true {
-				t.Logf(args_v)
+				t.Logf("%s", args_v)
 				if exp_args.(string) != args_v {
 					t.Errorf("len(args) not expected: (got)%v != (exp)%v", len(args_v), len(exp_args.([]string)))
 					return
@@ -623,15 +632,15 @@ func Test_jsonpath_get_scan(t *testing.T) {
 	}
 
 	obj4 := map[string]interface{}{
-		"key1" : "abc",
-		"key2" : 123,
-		"key3" : map[string]interface{}{
+		"key1": "abc",
+		"key2": 123,
+		"key3": map[string]interface{}{
 			"a": 1,
 			"b": 2,
 			"c": 3,
 		},
-		"key4" : []interface{}{1,2,3},
-		"key5" : nil,
+		"key4": []interface{}{1, 2, 3},
+		"key5": nil,
 	}
 	res, err = get_scan(obj4)
 	res_v, ok = res.([]interface{})
