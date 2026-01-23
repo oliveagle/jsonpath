@@ -1413,3 +1413,101 @@ func TestRecursiveDescent(t *testing.T) {
 		t.Errorf("Expected 5 prices, got %d: %v", len(prices), prices)
 	}
 }
+
+// Benchmarks
+
+func BenchmarkJsonPathLookup_Simple(b *testing.B) {
+	data := map[string]interface{}{
+		"store": map[string]interface{}{
+			"book": []interface{}{
+				map[string]interface{}{"author": "A", "price": 10.0},
+				map[string]interface{}{"author": "B", "price": 20.0},
+			},
+		},
+	}
+	
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		JsonPathLookup(data, "$.store.book[0].author")
+	}
+}
+
+func BenchmarkJsonPathLookup_Filter(b *testing.B) {
+	data := map[string]interface{}{
+		"store": map[string]interface{}{
+			"book": []interface{}{
+				map[string]interface{}{"author": "A", "price": 10.0},
+				map[string]interface{}{"author": "B", "price": 20.0},
+				map[string]interface{}{"author": "C", "price": 30.0},
+			},
+		},
+	}
+	
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		JsonPathLookup(data, "$.store.book[?(@.price > 15)].author")
+	}
+}
+
+func BenchmarkJsonPathLookup_Range(b *testing.B) {
+	data := map[string]interface{}{
+		"store": map[string]interface{}{
+			"book": []interface{}{
+				map[string]interface{}{"author": "A", "price": 10.0},
+				map[string]interface{}{"author": "B", "price": 20.0},
+				map[string]interface{}{"author": "C", "price": 30.0},
+			},
+		},
+	}
+	
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		JsonPathLookup(data, "$.store.book[0:2].price")
+	}
+}
+
+func BenchmarkJsonPathLookup_Recursive(b *testing.B) {
+	data := map[string]interface{}{
+		"store": map[string]interface{}{
+			"book": []interface{}{
+				map[string]interface{}{"author": "A", "price": 10.0},
+				map[string]interface{}{"author": "B", "price": 20.0},
+			},
+		},
+	}
+	
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		JsonPathLookup(data, "$..author")
+	}
+}
+
+func BenchmarkJsonPathLookup_RootArrayFilter(b *testing.B) {
+	data := []interface{}{
+		map[string]interface{}{"name": "John", "age": 30},
+		map[string]interface{}{"name": "Jane", "age": 25},
+		map[string]interface{}{"name": "Bob", "age": 35},
+	}
+	
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		JsonPathLookup(data, "$[?(@.age > 25)]")
+	}
+}
+
+func BenchmarkCompileAndLookup(b *testing.B) {
+	data := map[string]interface{}{
+		"store": map[string]interface{}{
+			"book": []interface{}{
+				map[string]interface{}{"author": "A", "price": 10.0},
+				map[string]interface{}{"author": "B", "price": 20.0},
+			},
+		},
+	}
+	
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		c, _ := Compile("$.store.book[?(@.price > 10)].author")
+		c.Lookup(data)
+	}
+}

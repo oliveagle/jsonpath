@@ -417,6 +417,10 @@ func get_key(obj interface{}, key string) (interface{}, error) {
 		return nil, fmt.Errorf("key error: %s not found in object", key)
 	case reflect.Slice:
 		// slice we should get from all objects in it.
+		// if key is empty, return the slice itself (for root array filtering)
+		if key == "" {
+			return obj, nil
+		}
 		res := []interface{}{}
 		for i := 0; i < reflect.ValueOf(obj).Len(); i++ {
 			tmp, _ := get_idx(obj, i)
