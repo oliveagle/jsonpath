@@ -1670,3 +1670,90 @@ func Test_jsonpath_range_syntax_rfc9535(t *testing.T) {
 		t.Errorf("Expected [2, 3, 4], got %v", resSlice)
 	}
 }
+
+// Issue #36: Add .length() function support
+// https://github.com/oliveagle/jsonpath/issues/36
+func Test_jsonpath_length_function(t *testing.T) {
+	// Test case 1: Get length of an array
+	arr := []interface{}{1, 2, 3, 4, 5}
+	res, err := JsonPathLookup(arr, "$.length()")
+	if err != nil {
+		t.Fatalf("$.length() failed: %v", err)
+	}
+	if res.(int) != 5 {
+		t.Errorf("Expected 5, got %v", res)
+	}
+
+	// Test case 2: Get length of a string
+	str := "hello"
+	res, err = JsonPathLookup(str, "$.length()")
+	if err != nil {
+		t.Fatalf("$.length() on string failed: %v", err)
+	}
+	if res.(int) != 5 {
+		t.Errorf("Expected 5, got %v", res)
+	}
+
+	// Test case 3: Use length() in filter
+	books := []interface{}{
+		map[string]interface{}{"title": "Book1", "pages": 100},
+		map[string]interface{}{"title": "Book2", "pages": 250},
+		map[string]interface{}{"title": "Book3", "pages": 50},
+	}
+	// $[?(@.pages > length($.books))] - would select books with pages > length of books (3)
+	res, err = JsonPathLookup(books, "$[?(@.pages > 3)]")
+	if err != nil {
+		t.Fatalf("$[?(@.pages > 3)] failed: %v", err)
+	}
+	resSlice, ok := res.([]interface{})
+	if !ok {
+		t.Fatalf("Expected []interface{}, got %T", res)
+	}
+	// Should return all books since pages (100, 250, 50) are all > 3
+	if len(resSlice) != 3 {
+		t.Errorf("Expected 3 books, got %d: %v", len(resSlice), resSlice)
+	}
+
+	// Test case 4: Get length of a map
+	obj := map[string]interface{}{
+		"a": 1,
+		"b": 2,
+		"c": 3,
+	}
+	res, err = JsonPathLookup(obj, "$.length()")
+	if err != nil {
+		t.Fatalf("$.length() on map failed: %v", err)
+	}
+	if res.(int) != 3 {
+		t.Errorf("Expected 3, got %v", res)
+	}
+
+	// Test case 5: length() with absolute path
+	store := map[string]interface{}{
+		"book": []interface{}{
+			map[string]interface{}{"title": "Book1"},
+			map[string]interface{}{"title": "Book2"},
+		},
+	}
+	res, err = JsonPathLookup(store, "$.book.length()")
+	if err != nil {
+		t.Fatalf("$.book.length() failed: %v", err)
+	}
+	if res.(int) != 2 {
+		t.Errorf("Expected 2, got %v", res)
+	}
+
+	// Test case 6: Use length() in filter with root path
+	res, err = JsonPathLookup(books, "$[?(@.pages > $.length())]")
+	if err != nil {
+		t.Fatalf("$[?(@.pages > $.length())] failed: %v", err)
+	}
+	resSlice, ok = res.([]interface{})
+	if !ok {
+		t.Fatalf("Expected []interface{}, got %T", res)
+	}
+	// $.length() on root books returns 3, so pages > 3 returns all
+	if len(resSlice) != 3 {
+		t.Errorf("Expected 3 books, got %d: %v", len(resSlice), resSlice)
+	}
+}

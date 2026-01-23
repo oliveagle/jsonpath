@@ -161,6 +161,25 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 					obj = filtered
 				}
 			}
+		case "func":
+			// Handle function calls like length()
+			// For function calls like $.length(), the key is the function name (e.g., "length")
+			// For path-based function calls like $.store.book.length(), the key is empty
+			// and we need to evaluate the function on the current object
+			if len(s.key) > 0 {
+				// This case handles paths like $.store.book.length() where the function
+				// is called on the result of the previous path step
+				obj, err = eval_func(obj, s.key)
+				if err != nil {
+					return nil, err
+				}
+			} else {
+				// This case handles direct function calls like $.length() or @.length()
+				obj, err = eval_func(obj, s.key)
+				if err != nil {
+					return nil, err
+				}
+			}
 		default:
 			return nil, fmt.Errorf("unsupported jsonpath operation: %s", s.op)
 		}
@@ -288,6 +307,11 @@ func parse_token(token string) (op string, key string, args interface{}, err err
 
 	bracket_idx := strings.Index(token, "[")
 	if bracket_idx < 0 {
+		// Check for function call like length()
+		if strings.HasSuffix(token, "()") {
+			funcName := strings.TrimSuffix(token, "()")
+			return "func", funcName, nil, nil
+		}
 		return "key", token, nil, nil
 	} else {
 		key = token[:bracket_idx]
@@ -382,6 +406,16 @@ func filter_get_from_explicit_path(obj interface{}, path string) (interface{}, e
 				return nil, err
 			}
 			xobj, err = get_idx(xobj, args.([]int)[0])
+			if err != nil {
+				return nil, err
+			}
+		case "func":
+			// Handle function calls like length()
+			xobj, err = get_key(xobj, key)
+			if err != nil {
+				return nil, err
+			}
+			xobj, err = eval_func(xobj, key)
 			if err != nil {
 				return nil, err
 			}
@@ -806,6 +840,40 @@ func eval_filter(obj, root interface{}, lp, op, rp string) (res bool, err error)
 		}
 		//fmt.Printf("lp_v: %v, rp_v: %v\n", lp_v, rp_v)
 		return cmp_any(lp_v, rp_v, op)
+	}
+}
+
+// eval_func evaluates function calls like length()
+func eval_func(obj interface{}, funcName string) (interface{}, error) {
+	switch funcName {
+	case "length":
+		return get_length(obj)
+	default:
+		return nil, fmt.Errorf("unsupported function: %s()", funcName)
+	}
+}
+
+// get_length returns the length of an array, string, or map
+func get_length(obj interface{}) (interface{}, error) {
+	if obj == nil {
+		return nil, nil
+	}
+	switch v := obj.(type) {
+	case []interface{}:
+		return len(v), nil
+	case string:
+		return len(v), nil
+	case map[string]interface{}:
+		return len(v), nil
+	default:
+		// Try to use reflection for other types
+		rv := reflect.ValueOf(obj)
+		switch rv.Kind() {
+		case reflect.Array, reflect.Slice, reflect.Map, reflect.String:
+			return rv.Len(), nil
+		default:
+			return nil, fmt.Errorf("length() not supported for type: %T", obj)
+		}
 	}
 }
 
