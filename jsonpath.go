@@ -144,6 +144,7 @@ func tokenize(query string) ([]string, error) {
 	//	token_start := false
 	//	token_end := false
 	token := ""
+	open := 0
 
 	// fmt.Println("-------------------------------------------------- start")
 	for idx, x := range query {
@@ -171,13 +172,21 @@ func tokenize(query string) ([]string, error) {
 			if strings.Contains(token, "[") {
 				// fmt.Println(" contains [ ")
 				if x == ']' && !strings.HasSuffix(token, "\\]") {
-					if token[0] == '.' {
-						tokens = append(tokens, token[1:])
-					} else {
-						tokens = append(tokens, token[:])
+					open--
+
+					if open == 0 {
+						if token[0] == '.' {
+							tokens = append(tokens, token[1:])
+						} else {
+							tokens = append(tokens, token[:])
+						}
+						token = ""
 					}
-					token = ""
 					continue
+				}
+
+				if x == '[' && !strings.HasSuffix(token, "\\[") {
+					open++
 				}
 			} else {
 				// fmt.Println(" doesn't contains [ ")
@@ -359,8 +368,12 @@ func get_key(obj interface{}, key string) (interface{}, error) {
 		res := []interface{}{}
 		for i := 0; i < reflect.ValueOf(obj).Len(); i++ {
 			tmp, _ := get_idx(obj, i)
-			if v, err := get_key(tmp, key); err == nil {
-				res = append(res, v)
+			if key == "" {
+				res = append(res, tmp)
+			} else {
+				if v, err := get_key(tmp, key); err == nil {
+					res = append(res, v)
+				}
 			}
 		}
 		return res, nil
@@ -663,7 +676,7 @@ func eval_filter(obj, root interface{}, lp, op, rp string) (res bool, err error)
 		var rp_v interface{}
 		if strings.HasPrefix(rp, "@.") {
 			rp_v, err = filter_get_from_explicit_path(obj, rp)
-		} else if strings.HasPrefix(rp, "$.") {
+		} else if strings.HasPrefix(rp, "$.") || strings.HasPrefix(rp, "$[") {
 			rp_v, err = filter_get_from_explicit_path(root, rp)
 		} else {
 			rp_v = rp
