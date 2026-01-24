@@ -1,3 +1,9 @@
+// Copyright 2015, 2021; oliver, DoltHub Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package jsonpath
 
 import (
@@ -7,11 +13,13 @@ import (
 	"go/types"
 	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 )
 
 var ErrGetFromNullObj = errors.New("get attribute from null object")
+var ErrKeyError = errors.New("key error: %s not found in object")
 
 func JsonPathLookup(obj interface{}, jpath string) (interface{}, error) {
 	c, err := Compile(jpath)
@@ -45,6 +53,9 @@ func Compile(jpath string) (*Compiled, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(tokens) == 0 {
+		return nil, fmt.Errorf("empty path")
+	}
 	if tokens[0] != "@" && tokens[0] != "$" {
 		return nil, fmt.Errorf("$ or @ should in front of path")
 	}
@@ -69,7 +80,7 @@ func (c *Compiled) String() string {
 
 func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 	var err error
-	for _, s := range c.steps {
+	for i, s := range c.steps {
 		// "key", "idx"
 		switch s.op {
 		case "key":
@@ -132,8 +143,45 @@ func (c *Compiled) Lookup(obj interface{}) (interface{}, error) {
 			if err != nil {
 				return nil, err
 			}
+		case "recursive":
+			obj = getAllDescendants(obj)
+			// Heuristic: if next step is key, exclude slices from candidates to avoid double-matching
+			// (once as container via implicit map, once as individual elements)
+			if i+1 < len(c.steps) && c.steps[i+1].op == "key" {
+				if candidates, ok := obj.([]interface{}); ok {
+					filtered := []interface{}{}
+					for _, cand := range candidates {
+						// Filter out Slices (but keep Maps and others)
+						// because get_key on Slice iterates children, which are already in candidates
+						v := reflect.ValueOf(cand)
+						if v.Kind() != reflect.Slice {
+							filtered = append(filtered, cand)
+						}
+					}
+					obj = filtered
+				}
+			}
+		case "func":
+			// Handle function calls like length()
+			// For function calls like $.length(), the key is the function name (e.g., "length")
+			// For path-based function calls like $.store.book.length(), the key is empty
+			// and we need to evaluate the function on the current object
+			if len(s.key) > 0 {
+				// This case handles paths like $.store.book.length() where the function
+				// is called on the result of the previous path step
+				obj, err = eval_func(obj, s.key)
+				if err != nil {
+					return nil, err
+				}
+			} else {
+				// This case handles direct function calls like $.length() or @.length()
+				obj, err = eval_func(obj, s.key)
+				if err != nil {
+					return nil, err
+				}
+			}
 		default:
-			return nil, fmt.Errorf("expression don't support in filter")
+			return nil, fmt.Errorf("unsupported jsonpath operation: %s", s.op)
 		}
 	}
 	return obj, nil
@@ -144,10 +192,27 @@ func tokenize(query string) ([]string, error) {
 	//	token_start := false
 	//	token_end := false
 	token := ""
-	open := 0
+	quoteChar := rune(0)
 
 	// fmt.Println("-------------------------------------------------- start")
 	for idx, x := range query {
+		if quoteChar != 0 {
+			if x == quoteChar {
+				quoteChar = 0
+			} else {
+				token += string(x)
+			}
+
+			continue
+		} else if x == '"' {
+			if token == "." {
+				token = ""
+			}
+
+			quoteChar = x
+			continue
+		}
+
 		token += string(x)
 		// //fmt.Printf("idx: %d, x: %s, token: %s, tokens: %v\n", idx, string(x), token, tokens)
 		if idx == 0 {
@@ -162,8 +227,8 @@ func tokenize(query string) ([]string, error) {
 		if token == "." {
 			continue
 		} else if token == ".." {
-			if tokens[len(tokens)-1] != "*" {
-				tokens = append(tokens, "*")
+			if len(tokens) == 0 || tokens[len(tokens)-1] != ".." {
+				tokens = append(tokens, "..")
 			}
 			token = "."
 			continue
@@ -172,21 +237,13 @@ func tokenize(query string) ([]string, error) {
 			if strings.Contains(token, "[") {
 				// fmt.Println(" contains [ ")
 				if x == ']' && !strings.HasSuffix(token, "\\]") {
-					open--
-
-					if open == 0 {
-						if token[0] == '.' {
-							tokens = append(tokens, token[1:])
-						} else {
-							tokens = append(tokens, token[:])
-						}
-						token = ""
+					if token[0] == '.' {
+						tokens = append(tokens, token[1:])
+					} else {
+						tokens = append(tokens, token[:])
 					}
+					token = ""
 					continue
-				}
-
-				if x == '[' && !strings.HasSuffix(token, "\\[") {
-					open++
 				}
 			} else {
 				// fmt.Println(" doesn't contains [ ")
@@ -202,17 +259,28 @@ func tokenize(query string) ([]string, error) {
 			}
 		}
 	}
+
+	if quoteChar != 0 {
+		token = string(quoteChar) + token
+	}
+
 	if len(token) > 0 {
 		if token[0] == '.' {
 			token = token[1:]
 			if token != "*" {
 				tokens = append(tokens, token[:])
+			} else if len(tokens) > 0 && tokens[len(tokens)-1] == ".." {
+				// $..* means recursive descent with scan, * is redundant after ..
+				// Don't add * as separate token
 			} else if tokens[len(tokens)-1] != "*" {
 				tokens = append(tokens, token[:])
 			}
 		} else {
 			if token != "*" {
 				tokens = append(tokens, token[:])
+			} else if len(tokens) > 0 && tokens[len(tokens)-1] == ".." {
+				// $..* means recursive descent with scan, * is redundant after ..
+				// Don't add * as separate token
 			} else if tokens[len(tokens)-1] != "*" {
 				tokens = append(tokens, token[:])
 			}
@@ -224,7 +292,7 @@ func tokenize(query string) ([]string, error) {
 }
 
 /*
- op: "root", "key", "idx", "range", "filter", "scan"
+op: "root", "key", "idx", "range", "filter", "scan"
 */
 func parse_token(token string) (op string, key string, args interface{}, err error) {
 	if token == "$" {
@@ -233,9 +301,17 @@ func parse_token(token string) (op string, key string, args interface{}, err err
 	if token == "*" {
 		return "scan", "*", nil, nil
 	}
+	if token == ".." {
+		return "recursive", "..", nil, nil
+	}
 
 	bracket_idx := strings.Index(token, "[")
 	if bracket_idx < 0 {
+		// Check for function call like length()
+		if strings.HasSuffix(token, "()") {
+			funcName := strings.TrimSuffix(token, "()")
+			return "func", funcName, nil, nil
+		}
 		return "key", token, nil, nil
 	} else {
 		key = token[:bracket_idx]
@@ -247,12 +323,19 @@ func parse_token(token string) (op string, key string, args interface{}, err err
 		tail = tail[1 : len(tail)-1]
 
 		//fmt.Println(key, tail)
-		if strings.Contains(tail, "?") {
+		if strings.HasPrefix(tail, "?") {
 			// filter -------------------------------------------------
 			op = "filter"
-			if strings.HasPrefix(tail, "?(") && strings.HasSuffix(tail, ")") {
-				args = strings.Trim(tail[2:len(tail)-1], " ")
+			// Remove leading ? - the content is everything after ?
+			filterContent := tail[1:]
+			// Handle filters like [?( @.isbn )] - remove outer parentheses if present
+			filterContent = strings.TrimSpace(filterContent)
+			if strings.HasPrefix(filterContent, "(") && strings.HasSuffix(filterContent, ")") {
+				// Remove outer parentheses
+				inner := filterContent[1 : len(filterContent)-1]
+				filterContent = strings.TrimSpace(inner)
 			}
+			args = filterContent
 			return
 		} else if strings.Contains(tail, ":") {
 			// range ----------------------------------------------
@@ -333,8 +416,18 @@ func filter_get_from_explicit_path(obj interface{}, path string) (interface{}, e
 			if err != nil {
 				return nil, err
 			}
+		case "func":
+			// Handle function calls like length()
+			xobj, err = get_key(xobj, key)
+			if err != nil {
+				return nil, err
+			}
+			xobj, err = eval_func(xobj, key)
+			if err != nil {
+				return nil, err
+			}
 		default:
-			return nil, fmt.Errorf("expression don't support in filter")
+			return nil, fmt.Errorf("unsupported jsonpath operation %s in filter", op)
 		}
 	}
 	return xobj, nil
@@ -366,15 +459,15 @@ func get_key(obj interface{}, key string) (interface{}, error) {
 		return nil, fmt.Errorf("key error: %s not found in object", key)
 	case reflect.Slice:
 		// slice we should get from all objects in it.
+		// if key is empty, return the slice itself (for root array filtering)
+		if key == "" {
+			return obj, nil
+		}
 		res := []interface{}{}
 		for i := 0; i < value.Len(); i++ {
 			tmp, _ := get_idx(obj, i)
-			if key == "" {
-				res = append(res, tmp)
-			} else {
-				if v, err := get_key(tmp, key); err == nil {
-					res = append(res, v)
-				}
+			if v, err := get_key(tmp, key); err == nil {
+				res = append(res, v)
 			}
 		}
 		return res, nil
@@ -462,7 +555,7 @@ func get_range(obj, frm, to interface{}) (interface{}, error) {
 			frm = 0
 		}
 		if to == nil {
-			to = length - 1
+			to = length
 		}
 		if fv, ok := frm.(int); ok == true {
 			if fv < 0 {
@@ -475,18 +568,36 @@ func get_range(obj, frm, to interface{}) (interface{}, error) {
 			if tv < 0 {
 				_to = length + tv + 1
 			} else {
-				_to = tv + 1
+				_to = tv
 			}
 		}
 		if _frm < 0 || _frm >= length {
 			return nil, fmt.Errorf("index [from] out of range: len: %v, from: %v", length, frm)
 		}
-		if _to < 0 || _to > length {
-			return nil, fmt.Errorf("index [to] out of range: len: %v, to: %v", length, to)
+		// Clamp _to to valid range [0, length] per RFC 9535
+		if _to < 0 {
+			_to = 0
+		}
+		if _to > length {
+			_to = length
 		}
 		//fmt.Println("_frm, _to: ", _frm, _to)
 		res_v := reflect.ValueOf(obj).Slice(_frm, _to)
 		return res_v.Interface(), nil
+	case reflect.Map:
+		// For wildcard [*] on maps, return all values
+		var res []interface{}
+		if jsonMap, ok := obj.(map[string]interface{}); ok {
+			for _, v := range jsonMap {
+				res = append(res, v)
+			}
+			return res, nil
+		}
+		keys := reflect.ValueOf(obj).MapKeys()
+		for _, k := range keys {
+			res = append(res, reflect.ValueOf(obj).MapIndex(k).Interface())
+		}
+		return res, nil
 	default:
 		return nil, fmt.Errorf("object is not Slice")
 	}
@@ -582,22 +693,110 @@ func get_filtered(obj, root interface{}, filter string) ([]interface{}, error) {
 	return res, nil
 }
 
+func get_scan(obj interface{}) (interface{}, error) {
+	if reflect.TypeOf(obj) == nil {
+		return nil, nil
+	}
+	switch reflect.TypeOf(obj).Kind() {
+	case reflect.Map:
+		// iterate over keys in sorted by length, then alphabetically
+		var res []interface{}
+		if jsonMap, ok := obj.(map[string]interface{}); ok {
+			var sortedKeys []string
+			for k := range jsonMap {
+				sortedKeys = append(sortedKeys, k)
+			}
+			sort.Slice(sortedKeys, func(i, j int) bool {
+				if len(sortedKeys[i]) != len(sortedKeys[j]) {
+					return len(sortedKeys[i]) < len(sortedKeys[j])
+				}
+				return sortedKeys[i] < sortedKeys[j]
+			})
+			for _, k := range sortedKeys {
+				res = append(res, jsonMap[k])
+			}
+			return res, nil
+		}
+		keys := reflect.ValueOf(obj).MapKeys()
+		sort.Slice(keys, func(i, j int) bool {
+			ki, kj := keys[i].String(), keys[j].String()
+			if len(ki) != len(kj) {
+				return len(ki) < len(kj)
+			}
+			return ki < kj
+		})
+		for _, k := range keys {
+			res = append(res, reflect.ValueOf(obj).MapIndex(k).Interface())
+		}
+		return res, nil
+	case reflect.Slice:
+		// slice we should get from all objects in it.
+		var res []interface{}
+		for i := 0; i < reflect.ValueOf(obj).Len(); i++ {
+			tmp := reflect.ValueOf(obj).Index(i).Interface()
+			newObj, err := get_scan(tmp)
+			if err != nil {
+				return nil, err
+			}
+			res = append(res, newObj.([]interface{})...)
+		}
+		return res, nil
+	default:
+		return nil, fmt.Errorf("object is not scannable: %v", reflect.TypeOf(obj).Kind())
+	}
+}
+
 // @.isbn                 => @.isbn, exists, nil
 // @.price < 10           => @.price, <, 10
 // @.price <= $.expensive => @.price, <=, $.expensive
 // @.author =~ /.*REES/i  => @.author, match, /.*REES/i
-
+// count(@.book) > 0      => count(@.book), >, 0
+// match(@.author, 'REES') => match(@.author, 'REES'), exists, nil
 func parse_filter(filter string) (lp string, op string, rp string, err error) {
 	tmp := ""
 
 	stage := 0
-	str_embrace := false
+	quoteChar := rune(0)
+	parenDepth := 0
 	for idx, c := range filter {
 		switch c {
 		case '\'':
-			if str_embrace == false {
-				str_embrace = true
+			if quoteChar == 0 {
+				quoteChar = c
+			} else if c == quoteChar {
+				quoteChar = 0
 			} else {
+				tmp += string(c)
+			}
+			continue
+		case '"':
+			if quoteChar == 0 {
+				quoteChar = c
+			} else if c == quoteChar {
+				quoteChar = 0
+			} else {
+				tmp += string(c)
+			}
+			continue
+		case '(':
+			if quoteChar == 0 {
+				parenDepth++
+			}
+			tmp += string(c)
+			continue
+		case ')':
+			if quoteChar == 0 {
+				parenDepth--
+			}
+			tmp += string(c)
+			continue
+		case ' ':
+			if quoteChar != 0 || parenDepth > 0 {
+				// Inside quotes or parentheses, keep the space
+				tmp += string(c)
+				continue
+			}
+			if tmp != "" {
 				switch stage {
 				case 0:
 					lp = tmp
@@ -607,25 +806,10 @@ func parse_filter(filter string) (lp string, op string, rp string, err error) {
 					rp = tmp
 				}
 				tmp = ""
-			}
-		case ' ':
-			if str_embrace == true {
-				tmp += string(c)
-				continue
-			}
-			switch stage {
-			case 0:
-				lp = tmp
-			case 1:
-				op = tmp
-			case 2:
-				rp = tmp
-			}
-			tmp = ""
-
-			stage += 1
-			if stage > 2 {
-				return "", "", "", errors.New(fmt.Sprintf("invalid char at %d: `%c`", idx, c))
+				stage++
+				if stage > 2 {
+					return "", "", "", errors.New(fmt.Sprintf("invalid char at %d: `%c`", idx, c))
+				}
 			}
 		default:
 			tmp += string(c)
@@ -635,55 +819,58 @@ func parse_filter(filter string) (lp string, op string, rp string, err error) {
 		switch stage {
 		case 0:
 			lp = tmp
-			op = "exists"
+			if strings.HasSuffix(lp, ")") || stage == 0 {
+				// Function call without operator, or simple expression without operator
+				// set exists operator
+				op = "exists"
+			}
 		case 1:
 			op = tmp
 		case 2:
 			rp = tmp
 		}
-		tmp = ""
 	}
 	return lp, op, rp, err
 }
 
-func parse_filter_v1(filter string) (lp string, op string, rp string, err error) {
-	tmp := ""
-	istoken := false
-	for _, c := range filter {
-		if istoken == false && c != ' ' {
-			istoken = true
-		}
-		if istoken == true && c == ' ' {
-			istoken = false
-		}
-		if istoken == true {
-			tmp += string(c)
-		}
-		if istoken == false && tmp != "" {
-			if lp == "" {
-				lp = tmp[:]
-				tmp = ""
-			} else if op == "" {
-				op = tmp[:]
-				tmp = ""
-			} else if rp == "" {
-				rp = tmp[:]
-				tmp = ""
-			}
-		}
-	}
-	if tmp != "" && lp == "" && op == "" && rp == "" {
-		lp = tmp[:]
-		op = "exists"
-		rp = ""
-		err = nil
-		return
-	} else if tmp != "" && rp == "" {
-		rp = tmp[:]
-		tmp = ""
-	}
-	return lp, op, rp, err
-}
+// func parse_filter_v1(filter string) (lp string, op string, rp string, err error) {
+// 	tmp := ""
+// 	istoken := false
+// 	for _, c := range filter {
+// 		if istoken == false && c != ' ' {
+// 			istoken = true
+// 		}
+// 		if istoken == true && c == ' ' {
+// 			istoken = false
+// 		}
+// 		if istoken == true {
+// 			tmp += string(c)
+// 		}
+// 		if istoken == false && tmp != "" {
+// 			if lp == "" {
+// 				lp = tmp[:]
+// 				tmp = ""
+// 			} else if op == "" {
+// 				op = tmp[:]
+// 				tmp = ""
+// 			} else if rp == "" {
+// 				rp = tmp[:]
+// 				tmp = ""
+// 			}
+// 		}
+// 	}
+// 	if tmp != "" && lp == "" && op == "" && rp == "" {
+// 		lp = tmp[:]
+// 		op = "exists"
+// 		rp = ""
+// 		err = nil
+// 		return
+// 	} else if tmp != "" && rp == "" {
+// 		rp = tmp[:]
+// 		tmp = ""
+// 	}
+// 	return lp, op, rp, err
+// }
 
 func eval_reg_filter(obj, root interface{}, lp string, pat *regexp.Regexp) (res bool, err error) {
 	if pat == nil {
@@ -702,6 +889,11 @@ func eval_reg_filter(obj, root interface{}, lp string, pat *regexp.Regexp) (res 
 }
 
 func get_lp_v(obj, root interface{}, lp string) (interface{}, error) {
+	// Check if lp is a function call like count(@.xxx) or match(@.xxx, pattern)
+	if strings.HasSuffix(lp, ")") {
+		return eval_filter_func(obj, root, lp)
+	}
+
 	var lp_v interface{}
 	if strings.HasPrefix(lp, "@.") {
 		return filter_get_from_explicit_path(obj, lp)
@@ -713,10 +905,269 @@ func get_lp_v(obj, root interface{}, lp string) (interface{}, error) {
 	return lp_v, nil
 }
 
+// eval_filter_func evaluates function calls in filter expressions
+func eval_filter_func(obj, root interface{}, expr string) (interface{}, error) {
+	// Find the first ( that starts the function arguments
+	parenIdx := -1
+	for i, c := range expr {
+		if c == '(' {
+			parenIdx = i
+			break
+		}
+	}
+
+	if parenIdx < 0 {
+		return nil, fmt.Errorf("invalid function call: %s", expr)
+	}
+
+	funcName := strings.TrimSpace(expr[:parenIdx])
+
+	// Find the matching closing parenthesis
+	argsStart := parenIdx + 1
+	argsEnd := -1
+	depth := 1
+	for i := argsStart; i < len(expr); i++ {
+		if expr[i] == '(' {
+			depth++
+		} else if expr[i] == ')' {
+			depth--
+			if depth == 0 {
+				argsEnd = i
+				break
+			}
+		}
+	}
+
+	if argsEnd < 0 {
+		return nil, fmt.Errorf("mismatched parentheses in function call: %s", expr)
+	}
+
+	argsStr := expr[argsStart:argsEnd]
+
+	// Split arguments by comma (respecting nested parentheses and quotes)
+	var args []string
+	current := ""
+	argDepth := 0
+	quoteChar := rune(0)
+	for _, c := range argsStr {
+		if quoteChar != 0 {
+			if c == quoteChar {
+				quoteChar = 0
+			}
+			current += string(c)
+			continue
+		}
+		if c == '"' || c == '\'' {
+			quoteChar = c
+			current += string(c)
+			continue
+		}
+		if c == '(' {
+			argDepth++
+		} else if c == ')' {
+			argDepth--
+		} else if c == ',' && argDepth == 0 {
+			args = append(args, strings.TrimSpace(current))
+			current = ""
+			continue
+		}
+		current += string(c)
+	}
+	if current != "" {
+		args = append(args, strings.TrimSpace(current))
+	}
+
+	// Evaluate function based on name
+	switch funcName {
+	case "count":
+		return eval_count(obj, root, args)
+	case "match":
+		return eval_match(obj, root, args)
+	case "search":
+		return eval_search(obj, root, args)
+	case "length":
+		return eval_length(obj, root, args)
+	default:
+		return nil, fmt.Errorf("unsupported function: %s()", funcName)
+	}
+}
+
+// eval_count evaluates count() function - returns the count of nodes in a nodelist
+func eval_count(obj, root interface{}, args []string) (interface{}, error) {
+	if len(args) != 1 {
+		return nil, fmt.Errorf("count() requires 1 argument, got %d", len(args))
+	}
+
+	arg := args[0]
+
+	// Special case: count(@) or count('') returns the length of the root array
+	if arg == "@" || arg == "" {
+		// Use root to get the array length
+		if root == nil {
+			return 0, nil
+		}
+		rv := reflect.ValueOf(root)
+		switch rv.Kind() {
+		case reflect.Array, reflect.Slice:
+			return rv.Len(), nil
+		default:
+			// Root is not an array, count as 1
+			return 1, nil
+		}
+	}
+
+	var nodeset interface{}
+	if strings.HasPrefix(arg, "@.") {
+		nodeset, _ = filter_get_from_explicit_path(obj, arg)
+	} else if strings.HasPrefix(arg, "$.") {
+		nodeset, _ = filter_get_from_explicit_path(root, arg)
+	} else {
+		// Literal string - treat as string length
+		return len(arg), nil
+	}
+
+	// Count nodes in the nodelist
+	if nodeset == nil {
+		return 0, nil
+	}
+	switch v := nodeset.(type) {
+	case []interface{}:
+		return len(v), nil
+	default:
+		// Single node, count as 1
+		return 1, nil
+	}
+}
+
+// eval_match evaluates match() function - regex with implicit anchoring (^pattern$)
+func eval_match(obj, root interface{}, args []string) (interface{}, error) {
+	if len(args) != 2 {
+		return nil, fmt.Errorf("match() requires 2 arguments (string, pattern), got %d", len(args))
+	}
+
+	// Get the string value
+	var strVal string
+	if strings.HasPrefix(args[0], "@.") {
+		v, err := filter_get_from_explicit_path(obj, args[0])
+		if err != nil {
+			return nil, err
+		}
+		if v == nil {
+			return false, nil
+		}
+		strVal = fmt.Sprintf("%v", v)
+	} else if strings.HasPrefix(args[0], "$.") {
+		v, err := filter_get_from_explicit_path(root, args[0])
+		if err != nil {
+			return nil, err
+		}
+		if v == nil {
+			return false, nil
+		}
+		strVal = fmt.Sprintf("%v", v)
+	} else {
+		strVal = args[0]
+	}
+
+	// Get the pattern (remove quotes if present)
+	pattern := args[1]
+	pattern = strings.Trim(pattern, `"'`)
+
+	// Compile regex with implicit anchoring (^pattern$)
+	re, err := regexp.Compile("^" + pattern + "$")
+	if err != nil {
+		return nil, fmt.Errorf("invalid regex pattern: %v", err)
+	}
+
+	return re.MatchString(strVal), nil
+}
+
+// eval_search evaluates search() function - regex without anchoring
+func eval_search(obj, root interface{}, args []string) (interface{}, error) {
+	if len(args) != 2 {
+		return nil, fmt.Errorf("search() requires 2 arguments (string, pattern), got %d", len(args))
+	}
+
+	// Get the string value
+	var strVal string
+	if strings.HasPrefix(args[0], "@.") {
+		v, err := filter_get_from_explicit_path(obj, args[0])
+		if err != nil {
+			return nil, err
+		}
+		if v == nil {
+			return false, nil
+		}
+		strVal = fmt.Sprintf("%v", v)
+	} else if strings.HasPrefix(args[0], "$.") {
+		v, err := filter_get_from_explicit_path(root, args[0])
+		if err != nil {
+			return nil, err
+		}
+		if v == nil {
+			return false, nil
+		}
+		strVal = fmt.Sprintf("%v", v)
+	} else {
+		strVal = args[0]
+	}
+
+	// Get the pattern (remove quotes if present)
+	pattern := args[1]
+	pattern = strings.Trim(pattern, `"'`)
+
+	// Compile regex without anchoring
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, fmt.Errorf("invalid regex pattern: %v", err)
+	}
+
+	return re.MatchString(strVal), nil
+}
+
+// eval_length evaluates length() function in filter context
+func eval_length(obj, root interface{}, args []string) (interface{}, error) {
+	if len(args) != 1 {
+		return nil, fmt.Errorf("length() requires 1 argument, got %d", len(args))
+	}
+
+	var val interface{}
+	if strings.HasPrefix(args[0], "@.") {
+		val, _ = filter_get_from_explicit_path(obj, args[0])
+	} else if strings.HasPrefix(args[0], "$.") {
+		val, _ = filter_get_from_explicit_path(root, args[0])
+	} else {
+		val = args[0]
+	}
+
+	return get_length(val)
+}
+
 func eval_filter(obj, root interface{}, lp, op, rp string) (res bool, err error) {
 	lp_v, err := get_lp_v(obj, root, lp)
 
+	// If op is empty, treat it as an exists check (truthy check)
+	if op == "" {
+		op = "exists"
+	}
+
 	if op == "exists" {
+		// If lp_v is a function call (contains parentheses), evaluate it
+		// and return the boolean result
+		if strings.HasSuffix(lp, ")") {
+			// It's a function call, get_lp_v should have evaluated it
+			// and returned the result (which could be bool, int, etc.)
+			switch v := lp_v.(type) {
+			case bool:
+				return v, nil
+			case int, int8, int16, int32, int64, float32, float64:
+				// Non-zero values are truthy
+				return v != 0, nil
+			default:
+				// For other types, check if not nil
+				return lp_v != nil, nil
+			}
+		}
 		return lp_v != nil, nil
 	} else if op == "=~" {
 		return false, fmt.Errorf("not implemented yet")
@@ -724,13 +1175,47 @@ func eval_filter(obj, root interface{}, lp, op, rp string) (res bool, err error)
 		var rp_v interface{}
 		if strings.HasPrefix(rp, "@.") {
 			rp_v, err = filter_get_from_explicit_path(obj, rp)
-		} else if strings.HasPrefix(rp, "$.") || strings.HasPrefix(rp, "$[") {
+		} else if strings.HasPrefix(rp, "$.") {
 			rp_v, err = filter_get_from_explicit_path(root, rp)
 		} else {
 			rp_v = rp
 		}
 		//fmt.Printf("lp_v: %v, rp_v: %v\n", lp_v, rp_v)
 		return cmp_any(lp_v, rp_v, op)
+	}
+}
+
+// eval_func evaluates function calls like length()
+func eval_func(obj interface{}, funcName string) (interface{}, error) {
+	switch funcName {
+	case "length":
+		return get_length(obj)
+	default:
+		return nil, fmt.Errorf("unsupported function: %s()", funcName)
+	}
+}
+
+// get_length returns the length of an array, string, or map
+func get_length(obj interface{}) (interface{}, error) {
+	if obj == nil {
+		return nil, nil
+	}
+	switch v := obj.(type) {
+	case []interface{}:
+		return len(v), nil
+	case string:
+		return len(v), nil
+	case map[string]interface{}:
+		return len(v), nil
+	default:
+		// Try to use reflection for other types
+		rv := reflect.ValueOf(obj)
+		switch rv.Kind() {
+		case reflect.Array, reflect.Slice, reflect.Map, reflect.String:
+			return rv.Len(), nil
+		default:
+			return nil, fmt.Errorf("length() not supported for type: %T", obj)
+		}
 	}
 }
 
@@ -780,4 +1265,38 @@ func cmp_any(obj1, obj2 interface{}, op string) (bool, error) {
 	}
 
 	return false, nil
+}
+
+func getAllDescendants(obj interface{}) []interface{} {
+	res := []interface{}{}
+	var recurse func(curr interface{})
+	recurse = func(curr interface{}) {
+		res = append(res, curr)
+		v := reflect.ValueOf(curr)
+		if !v.IsValid() {
+			return
+		}
+
+		kind := v.Kind()
+		if kind == reflect.Ptr {
+			v = v.Elem()
+			if !v.IsValid() {
+				return
+			}
+			kind = v.Kind()
+		}
+
+		switch kind {
+		case reflect.Map:
+			for _, k := range v.MapKeys() {
+				recurse(v.MapIndex(k).Interface())
+			}
+		case reflect.Slice, reflect.Array:
+			for i := 0; i < v.Len(); i++ {
+				recurse(v.Index(i).Interface())
+			}
+		}
+	}
+	recurse(obj)
+	return res
 }

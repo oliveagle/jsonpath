@@ -1,0 +1,37 @@
+==========================================
+JSONPath Benchmark Report
+==========================================
+
+Version: v0.1.4
+Date: 2026-01-23
+Go Version: go1.25.5
+
+==========================================
+Benchmarks
+==========================================
+
+goos: linux
+goarch: amd64
+pkg: github.com/oliveagle/jsonpath
+cpu: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S          
+BenchmarkJsonPathLookupCompiled-32            	35118480	        33.26 ns/op	       0 B/op	       0 allocs/op
+BenchmarkJsonPathLookup-32                    	 1713906	       670.7 ns/op	     568 B/op	      47 allocs/op
+BenchmarkJsonPathLookup_0-32                  	 3803637	       309.1 ns/op	     272 B/op	      24 allocs/op
+BenchmarkJsonPathLookup_1-32                  	 1773507	       655.3 ns/op	     568 B/op	      47 allocs/op
+BenchmarkJsonPathLookup_2-32                  	 1705456	       717.5 ns/op	     584 B/op	      49 allocs/op
+BenchmarkJsonPathLookup_3-32                  	 1362768	       883.8 ns/op	     776 B/op	      58 allocs/op
+BenchmarkJsonPathLookup_4-32                  	 1431178	       833.1 ns/op	     720 B/op	      54 allocs/op
+BenchmarkJsonPathLookup_5-32                  	  588325	      2039 ns/op	    1426 B/op	     132 allocs/op
+BenchmarkJsonPathLookup_6-32                  	  102320	     11595 ns/op	   15265 B/op	     348 allocs/op
+BenchmarkJsonPathLookup_7-32                  	  101847	     12036 ns/op	   15657 B/op	     450 allocs/op
+BenchmarkJsonPathLookup_8-32                  	 1373995	       852.0 ns/op	     832 B/op	      53 allocs/op
+BenchmarkJsonPathLookup_9-32                  	  126504	      9328 ns/op	   14166 B/op	     334 allocs/op
+BenchmarkJsonPathLookup_10-32                 	  231618	      4942 ns/op	    3797 B/op	     225 allocs/op
+BenchmarkJsonPathLookup_Simple-32             	 1728055	       693.0 ns/op	     568 B/op	      49 allocs/op
+BenchmarkJsonPathLookup_Filter-32             	  172152	      6510 ns/op	    9711 B/op	     227 allocs/op
+BenchmarkJsonPathLookup_Range-32              	 1479668	       830.8 ns/op	     720 B/op	      54 allocs/op
+BenchmarkJsonPathLookup_Recursive-32          	  746787	      1618 ns/op	    1850 B/op	      65 allocs/op
+BenchmarkJsonPathLookup_RootArrayFilter-32    	  227734	      5397 ns/op	    9086 B/op	     169 allocs/op
+BenchmarkCompileAndLookup-32                  	  237066	      4844 ns/op	    6778 B/op	     182 allocs/op
+PASS
+ok  	github.com/oliveagle/jsonpath	30.683s
