@@ -11,6 +11,8 @@ This library is till bleeding edge, so use it at your own risk. :D
 
 **Golang Version Required**: 1.15+
 
+**Dependencies**: None! This library uses only Go standard library.
+
 Get Started
 ------------
 
