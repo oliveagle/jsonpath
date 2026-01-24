@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main, v*]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ['1.20', '1.21', '1.22', '1.23']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-${{ matrix.go-version }}-
+
+      - name: Test
+        run: go test -v ./...
+
+      - name: Test with Coverage
+        run: go test -coverprofile=coverage.out ./...
+
+      - name: Upload Coverage
+        if: matrix.go-version == '1.22'
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.out
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Check formatting
+        run: |
+          if ! gofmt -d . | grep -q .; then
+            echo "Code is properly formatted"
+          else
+            echo "Code needs formatting"
+            gofmt -d .
+            exit 1
+          fi
+
+      - name: Run staticcheck
+        uses: dominantv/ci-staticcheck-action@latest
+        with:
+          version: latest
+          packages: ./...
+          flags: -checks=all
+
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Run benchmarks
+        run: go test -bench=. -benchmem ./...
+
+      - name: Upload benchmark results
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: Go Benchmark
+          tool: 'go'
+          output-file-path: bench.txt
+          github-pages: false
+          alert-threshold: '200%'
+          fail-on-alert: false
+        env:
+          BENCHMARK_FLAG: '-bench=. -benchmem'
