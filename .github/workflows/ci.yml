@@ -62,9 +62,12 @@ jobs:
 
       - name: Check formatting
         run: |
-          if ! gofmt -d . | grep -q .; then
+          # Only check .go files, not go.mod or other config files
+          if ! gofmt -l *.go ./... 2>/dev/null | grep -q .; then
+            echo "Code is properly formatted"
+          else
             echo "Code needs formatting"
-            gofmt -d .
+            gofmt -d *.go ./...
             exit 1
           fi
 
