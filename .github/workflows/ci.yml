@@ -69,12 +69,11 @@ jobs:
             exit 1
           fi
 
+      - name: Install staticcheck
+        run: go install honnef.co/go/tools/cmd/staticcheck@latest
+
       - name: Run staticcheck
-        uses: dominantv/ci-staticcheck-action@latest
-        with:
-          version: latest
-          packages: ./...
-          flags: -checks=all
+        run: staticcheck ./...
 
   benchmark:
     runs-on: ubuntu-latest
