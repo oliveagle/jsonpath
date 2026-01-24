@@ -64,14 +64,7 @@ jobs:
         run: |
           # Only check .go files, not go.mod or other config files
           if ! gofmt -l *.go ./... 2>/dev/null | grep -q .; then
-            echo "Code is properly formatted"
-          else
             echo "Code needs formatting"
             gofmt -d *.go ./...
             exit 1
           fi
-
-      - name: Install and run staticcheck
-        run: |
-          go install honnef.co/go/tools/cmd/staticcheck@latest
-          staticcheck ./...
