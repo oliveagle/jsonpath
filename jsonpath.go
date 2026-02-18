@@ -397,6 +397,9 @@ func filter_get_from_explicit_path(obj interface{}, path string) (interface{}, e
 	//fmt.Println("f: xobj", xobj)
 	for _, s := range steps {
 		op, key, args, err := parse_token(s)
+		if err != nil {
+			return nil, err
+		}
 		// "key", "idx"
 		switch op {
 		case "key":
