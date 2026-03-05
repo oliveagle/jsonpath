@@ -1303,3 +1303,409 @@ func getAllDescendants(obj interface{}) []interface{} {
 	recurse(obj)
 	return res
 }
+
+// ============================================================================
+// Set/Update Functions
+// ============================================================================
+
+// JsonPathSet sets a value at the specified JSONPath and returns a new object
+// (deep copy approach - original object is not modified)
+func JsonPathSet(obj interface{}, jpath string, value interface{}) (interface{}, error) {
+	c, err := Compile(jpath)
+	if err != nil {
+		return nil, err
+	}
+	return c.Set(obj, value)
+}
+
+// Set sets a value at the compiled path and returns a new object
+func (c *Compiled) Set(obj interface{}, value interface{}) (interface{}, error) {
+	// Deep copy the object first
+	copiedObj := deepCopy(obj)
+
+	// Check if path is valid
+	if len(c.steps) == 0 {
+		return nil, fmt.Errorf("empty path")
+	}
+
+	// Navigate to parent and set the value
+	result, err := set_recursive(copiedObj, c.steps, 0, value)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// set_recursive recursively navigates to the target location and sets the value
+func set_recursive(obj interface{}, steps []step, idx int, value interface{}) (interface{}, error) {
+	if idx >= len(steps) {
+		return value, nil
+	}
+
+	step := steps[idx]
+
+	switch step.op {
+	case "key":
+		return set_key(obj, step.key, steps, idx, value)
+	case "idx":
+		return set_idx(obj, step, steps, idx, value)
+	case "range":
+		return set_range(obj, step, steps, idx, value)
+	default:
+		return nil, fmt.Errorf("unsupported operation for set: %s", step.op)
+	}
+}
+
+// set_key sets a value by key in a map or struct
+func set_key(obj interface{}, key string, steps []step, idx int, value interface{}) (interface{}, error) {
+	if obj == nil {
+		return nil, ErrGetFromNullObj
+	}
+
+	v := reflect.ValueOf(obj)
+	if !v.IsValid() {
+		return nil, ErrGetFromNullObj
+	}
+
+	// Unwrap interface to get the underlying value
+	if v.Kind() == reflect.Interface {
+		v = v.Elem()
+		if !v.IsValid() {
+			return nil, ErrGetFromNullObj
+		}
+	}
+
+	switch v.Kind() {
+	case reflect.Map:
+		// Check if map is nil
+		if v.IsNil() {
+			return nil, ErrGetFromNullObj
+		}
+
+		// Deep copy the map
+		newMap := reflect.MakeMap(v.Type())
+		for _, mapKey := range v.MapKeys() {
+			newMap.SetMapIndex(mapKey, deepCopyValue(v.MapIndex(mapKey)))
+		}
+
+		// Navigate to next level or set value
+		if idx+1 >= len(steps) {
+			// This is the final key - set the value
+			mapKey := reflect.ValueOf(key)
+			newMap.SetMapIndex(mapKey, reflect.ValueOf(value))
+		} else {
+			// Navigate deeper
+			mapKey := reflect.ValueOf(key)
+			currentVal := v.MapIndex(mapKey)
+			if !currentVal.IsValid() {
+				return nil, fmt.Errorf("key error: %s not found in object", key)
+			}
+			newVal, err := set_recursive(deepCopyValue(currentVal).Interface(), steps, idx+1, value)
+			if err != nil {
+				return nil, err
+			}
+			newMap.SetMapIndex(mapKey, reflect.ValueOf(newVal))
+		}
+		return newMap.Interface(), nil
+
+	case reflect.Struct:
+		// Find the field by name or json tag
+		fieldIdx := -1
+		for i := 0; i < v.NumField(); i++ {
+			field := v.Type().Field(i)
+			if field.Name == key {
+				fieldIdx = i
+				break
+			}
+			if tag := field.Tag.Get("json"); tag != "" {
+				if tag == key || strings.HasPrefix(tag, key+",") {
+					fieldIdx = i
+					break
+				}
+			}
+		}
+
+		if fieldIdx < 0 {
+			return nil, fmt.Errorf("key error: %s not found in struct", key)
+		}
+
+		// Create a copy of the struct
+		newStruct := reflect.New(v.Type()).Elem()
+		for i := 0; i < v.NumField(); i++ {
+			if i == fieldIdx {
+				if idx+1 >= len(steps) {
+					newStruct.Field(i).Set(reflect.ValueOf(value))
+				} else {
+					newVal, err := set_recursive(deepCopyValue(v.Field(i)).Interface(), steps, idx+1, value)
+					if err != nil {
+						return nil, err
+					}
+					newStruct.Field(i).Set(reflect.ValueOf(newVal))
+				}
+			} else {
+				newStruct.Field(i).Set(v.Field(i))
+			}
+		}
+		return newStruct.Interface(), nil
+
+	default:
+		return nil, fmt.Errorf("cannot set key on non-map/struct type: %s", v.Kind())
+	}
+}
+
+// set_idx sets a value by index in a slice
+func set_idx(obj interface{}, step step, steps []step, idx int, value interface{}) (interface{}, error) {
+	if obj == nil {
+		return nil, ErrGetFromNullObj
+	}
+
+	// Store original obj if we need to update a map later
+	var originalObj interface{}
+	var needToUpdateMap bool
+
+	// First, handle key if present (e.g., $.numbers[0] where key="numbers")
+	if len(step.key) > 0 {
+		var err error
+		originalObj = obj
+		needToUpdateMap = true
+		obj, err = get_key(obj, step.key)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	v := reflect.ValueOf(obj)
+	// Unwrap interface to get the underlying value
+	if v.Kind() == reflect.Interface {
+		v = v.Elem()
+		if !v.IsValid() {
+			return nil, ErrGetFromNullObj
+		}
+	}
+	if v.Kind() != reflect.Slice {
+		return nil, fmt.Errorf("cannot index non-slice type: %s", v.Kind())
+	}
+
+	// Get the index to set
+	indices := step.args.([]int)
+	if len(indices) == 0 {
+		return nil, fmt.Errorf("cannot index on empty slice")
+	}
+
+	// For now, only support single index in set operations
+	targetIdx := indices[0]
+	length := v.Len()
+
+	// Handle negative index
+	if targetIdx < 0 {
+		targetIdx = length + targetIdx
+	}
+
+	if targetIdx < 0 || targetIdx >= length {
+		return nil, fmt.Errorf("index out of range: len: %v, idx: %v", length, targetIdx)
+	}
+
+	// Create a new slice with copied elements
+	newSlice := reflect.MakeSlice(v.Type(), length, length)
+	for i := 0; i < length; i++ {
+		if i == targetIdx {
+			if idx+1 >= len(steps) {
+				// This is the final index - set the value
+				newSlice.Index(i).Set(reflect.ValueOf(value))
+			} else {
+				// Navigate deeper
+				newVal, err := set_recursive(deepCopyValue(v.Index(i)).Interface(), steps, idx+1, value)
+				if err != nil {
+					return nil, err
+				}
+				newSlice.Index(i).Set(reflect.ValueOf(newVal))
+			}
+		} else {
+			newSlice.Index(i).Set(v.Index(i))
+		}
+	}
+
+	// If we had a key, we need to set the modified slice back to the original map
+	if needToUpdateMap {
+		// Get the type of the original map
+		origV := reflect.ValueOf(originalObj)
+		if origV.Kind() == reflect.Interface {
+			origV = origV.Elem()
+		}
+		if origV.Kind() != reflect.Map {
+			return nil, fmt.Errorf("expected map when key is present, got %s", origV.Kind())
+		}
+
+		// Create a new map with all keys copied and the target key updated
+		newMap := reflect.MakeMap(origV.Type())
+		for _, mapKey := range origV.MapKeys() {
+			if mapKey.String() == step.key {
+				newMap.SetMapIndex(mapKey, reflect.ValueOf(newSlice.Interface()))
+			} else {
+				newMap.SetMapIndex(mapKey, deepCopyValue(origV.MapIndex(mapKey)))
+			}
+		}
+		return newMap.Interface(), nil
+	}
+
+	return newSlice.Interface(), nil
+}
+
+// set_range sets values in a range in a slice
+func set_range(obj interface{}, step step, steps []step, idx int, value interface{}) (interface{}, error) {
+	if obj == nil {
+		return nil, ErrGetFromNullObj
+	}
+
+	// First, handle key if present (e.g., $[:1].key or $.numbers[:1])
+	if len(step.key) > 0 {
+		var err error
+		obj, err = get_key(obj, step.key)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	v := reflect.ValueOf(obj)
+	// Unwrap interface to get the underlying value
+	if v.Kind() == reflect.Interface {
+		v = v.Elem()
+		if !v.IsValid() {
+			return nil, ErrGetFromNullObj
+		}
+	}
+	if v.Kind() != reflect.Slice {
+		return nil, fmt.Errorf("cannot apply range on non-slice type: %s", v.Kind())
+	}
+
+	args := step.args.([2]interface{})
+	length := v.Len()
+
+	// Parse from index
+	from := 0
+	if args[0] != nil {
+		from = args[0].(int)
+		if from < 0 {
+			from = length + from
+		}
+	}
+
+	// Parse to index
+	to := length
+	if args[1] != nil {
+		to = args[1].(int)
+		if to < 0 {
+			to = length + to + 1
+		}
+	}
+
+	// Clamp to valid range
+	if from < 0 {
+		from = 0
+	}
+	if to > length {
+		to = length
+	}
+	if from > to {
+		from = to
+	}
+
+	// Create a new slice with copied elements
+	newSlice := reflect.MakeSlice(v.Type(), length, length)
+	for i := 0; i < length; i++ {
+		if i >= from && i < to {
+			if idx+1 >= len(steps) {
+				// This is the final range - set the values
+				newSlice.Index(i).Set(reflect.ValueOf(value))
+			} else {
+				// Navigate deeper
+				newVal, err := set_recursive(deepCopyValue(v.Index(i)).Interface(), steps, idx+1, value)
+				if err != nil {
+					return nil, err
+				}
+				newSlice.Index(i).Set(reflect.ValueOf(newVal))
+			}
+		} else {
+			newSlice.Index(i).Set(v.Index(i))
+		}
+	}
+
+	return newSlice.Interface(), nil
+}
+
+// deepCopy creates a deep copy of the given object
+func deepCopy(obj interface{}) interface{} {
+	if obj == nil {
+		return nil
+	}
+
+	v := reflect.ValueOf(obj)
+	if !v.IsValid() {
+		return nil
+	}
+
+	switch v.Kind() {
+	case reflect.Map:
+		if v.IsNil() {
+			return nil
+		}
+		newMap := reflect.MakeMap(v.Type())
+		for _, key := range v.MapKeys() {
+			newMap.SetMapIndex(key, deepCopyValue(v.MapIndex(key)))
+		}
+		return newMap.Interface()
+
+	case reflect.Slice:
+		if v.IsNil() {
+			return nil
+		}
+		newSlice := reflect.MakeSlice(v.Type(), v.Len(), v.Cap())
+		for i := 0; i < v.Len(); i++ {
+			newSlice.Index(i).Set(deepCopyValue(v.Index(i)))
+		}
+		return newSlice.Interface()
+
+	case reflect.Ptr:
+		if v.IsNil() {
+			return nil
+		}
+		newPtr := reflect.New(v.Type().Elem())
+		copiedVal := deepCopyValue(v.Elem())
+		newPtr.Elem().Set(copiedVal)
+		return newPtr.Interface()
+
+	case reflect.Struct:
+		newStruct := reflect.New(v.Type()).Elem()
+		for i := 0; i < v.NumField(); i++ {
+			newStruct.Field(i).Set(deepCopyValue(v.Field(i)))
+		}
+		return newStruct.Interface()
+
+	default:
+		// Primitive types - return as is
+		return obj
+	}
+}
+
+// deepCopyValue deep copies a reflect.Value and returns reflect.Value
+func deepCopyValue(v reflect.Value) reflect.Value {
+	if !v.IsValid() {
+		return reflect.ValueOf(nil)
+	}
+
+	switch v.Kind() {
+	case reflect.Interface:
+		// Unwrap interface and deep copy the underlying value
+		if v.IsNil() {
+			return reflect.ValueOf(nil)
+		}
+		return reflect.ValueOf(deepCopy(v.Elem().Interface()))
+
+	case reflect.Map, reflect.Slice, reflect.Ptr, reflect.Struct:
+		copied := deepCopy(v.Interface())
+		return reflect.ValueOf(copied)
+
+	default:
+		return v
+	}
+}
