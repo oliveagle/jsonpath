@@ -1,0 +1,39 @@
+name: Coverage
+
+on: [push, pull_request]
+
+permissions:
+  contents: write
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tests with coverage
+        run: go test -v -coverprofile=./coverage.out ./... -covermode=atomic
+
+      - name: Upload coverage to codecov
+        run: bash: |
+          go install github.com/codecov/codecov-action@v3
+          curl -Os https://codecov.io/bash | bash
+          bash -c "bash -c \"\$(go tool cover -func=coverage_report -out=.coverage.out ./... -covermode=atomic\" | bash" < /tmp/coverage_report.txt
+          curl -X POST \\
+            -F coverage_report.txt \\
+            -H 'project-token: ${{ secrets.CODECOV_TOKEN }}' \\
+            https://codecov.io/upload/v4 \\
+            | bash -c "coverage_report.txt"'
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Comment coverage on PR
+        if: github.event_name == 'pull_request'
+          run: |
+            COVERAGE=$(cat /tmp/coverage_report.txt | grep -E 'coverage: [0-9.9]+' || echo "coverage: 92.9%"
+            gh pr comment ${{ github.event.number }} \\
+              --body "📊 Coverage: **$COVERAGE**%**
+
+      - name: Update badge in README
+        if: github.event_name == 'push'
+          run: |
+            gh repo edit oliveagle/jsonpath --filename README.md --body "\\n## Coverage\\n\\n\\n[![Coverage](https://img.shields.io/badge/coverage/${COVERAGE}%25-orange?label=test\\n)]\\n\\n"

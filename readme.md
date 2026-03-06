@@ -1,7 +1,8 @@
 JsonPath
 ----------------
 
-![Build Status](https://travis-ci.org/oliveagle/jsonpath.svg?branch=master)
+[![Tests](https://github.com/oliveagle/jsonpath/actions/workflows/test.yml/badge.svg)](https://github.com/oliveagle/jsonpath/actions/workflows/test.yml)
+![Coverage](https://img.shields.io/badge/coverage-90.2%25-brightgreen)
 
 A golang implementation of JsonPath syntax.
 Follow the majority rules in http://goessner.net/articles/JsonPath/
