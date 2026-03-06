@@ -1,0 +1,1814 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>jsonpath: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/oliveagle/jsonpath/jsonpath.go (90.9%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">// Copyright 2015, 2021; oliver, DoltHub Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
+package jsonpath
+
+import (
+        "errors"
+        "fmt"
+        "go/token"
+        "go/types"
+        "reflect"
+        "regexp"
+        "sort"
+        "strconv"
+        "strings"
+)
+
+var ErrGetFromNullObj = errors.New("get attribute from null object")
+var ErrKeyError = errors.New("key error: %s not found in object")
+
+func JsonPathLookup(obj interface{}, jpath string) (interface{}, error) <span class="cov8" title="1">{
+        c, err := Compile(jpath)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">return c.Lookup(obj)</span>
+}
+
+type Compiled struct {
+        path  string
+        steps []step
+}
+
+type step struct {
+        op   string
+        key  string
+        args interface{}
+}
+
+func MustCompile(jpath string) *Compiled <span class="cov8" title="1">{
+        c, err := Compile(jpath)
+        if err != nil </span><span class="cov8" title="1">{
+                panic(err)</span>
+        }
+        <span class="cov8" title="1">return c</span>
+}
+
+func Compile(jpath string) (*Compiled, error) <span class="cov8" title="1">{
+        tokens, err := tokenize(jpath)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">if len(tokens) == 0 </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("empty path")
+        }</span>
+        <span class="cov8" title="1">if tokens[0] != "@" &amp;&amp; tokens[0] != "$" </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("$ or @ should in front of path")
+        }</span>
+        <span class="cov8" title="1">tokens = tokens[1:]
+        res := Compiled{
+                path:  jpath,
+                steps: make([]step, len(tokens)),
+        }
+        for i, token := range tokens </span><span class="cov8" title="1">{
+                op, key, args, err := parse_token(token)
+                if err != nil </span><span class="cov8" title="1">{
+                        return nil, err
+                }</span>
+                <span class="cov8" title="1">res.steps[i] = step{op, key, args}</span>
+        }
+        <span class="cov8" title="1">return &amp;res, nil</span>
+}
+
+func (c *Compiled) String() string <span class="cov8" title="1">{
+        return fmt.Sprintf("Compiled lookup: %s", c.path)
+}</span>
+
+func (c *Compiled) Lookup(obj interface{}) (interface{}, error) <span class="cov8" title="1">{
+        var err error
+        for i, s := range c.steps </span><span class="cov8" title="1">{
+                // "key", "idx"
+                switch s.op </span>{
+                case "key":<span class="cov8" title="1">
+                        obj, err = get_key(obj, s.key)
+                        if err != nil </span><span class="cov8" title="1">{
+                                return nil, err
+                        }</span>
+                case "idx":<span class="cov8" title="1">
+                        if len(s.key) &gt; 0 </span><span class="cov8" title="1">{
+                                // no key `$[0].test`
+                                obj, err = get_key(obj, s.key)
+                                if err != nil </span><span class="cov0" title="0">{
+                                        return nil, err
+                                }</span>
+                        }
+
+                        <span class="cov8" title="1">if len(s.args.([]int)) &gt; 1 </span><span class="cov8" title="1">{
+                                res := []interface{}{}
+                                for _, x := range s.args.([]int) </span><span class="cov8" title="1">{
+                                        //fmt.Println("idx ---- ", x)
+                                        tmp, err := get_idx(obj, x)
+                                        if err != nil </span><span class="cov0" title="0">{
+                                                return nil, err
+                                        }</span>
+                                        <span class="cov8" title="1">res = append(res, tmp)</span>
+                                }
+                                <span class="cov8" title="1">obj = res</span>
+                        } else<span class="cov8" title="1"> if len(s.args.([]int)) == 1 </span><span class="cov8" title="1">{
+                                //fmt.Println("idx ----------------3")
+                                obj, err = get_idx(obj, s.args.([]int)[0])
+                                if err != nil </span><span class="cov8" title="1">{
+                                        return nil, err
+                                }</span>
+                        } else<span class="cov0" title="0"> {
+                                //fmt.Println("idx ----------------4")
+                                return nil, fmt.Errorf("cannot index on empty slice")
+                        }</span>
+                case "range":<span class="cov8" title="1">
+                        if len(s.key) &gt; 0 </span><span class="cov8" title="1">{
+                                // no key `$[:1].test`
+                                obj, err = get_key(obj, s.key)
+                                if err != nil </span><span class="cov0" title="0">{
+                                        return nil, err
+                                }</span>
+                        }
+                        <span class="cov8" title="1">if argsv, ok := s.args.([2]interface{}); ok == true </span><span class="cov8" title="1">{
+                                obj, err = get_range(obj, argsv[0], argsv[1])
+                                if err != nil </span><span class="cov0" title="0">{
+                                        return nil, err
+                                }</span>
+                        } else<span class="cov0" title="0"> {
+                                return nil, fmt.Errorf("range args length should be 2")
+                        }</span>
+                case "filter":<span class="cov8" title="1">
+                        obj, err = get_key(obj, s.key)
+                        if err != nil </span><span class="cov0" title="0">{
+                                return nil, err
+                        }</span>
+                        <span class="cov8" title="1">obj, err = get_filtered(obj, obj, s.args.(string))
+                        if err != nil </span><span class="cov0" title="0">{
+                                return nil, err
+                        }</span>
+                case "recursive":<span class="cov8" title="1">
+                        obj = getAllDescendants(obj)
+                        // Heuristic: if next step is key, exclude slices from candidates to avoid double-matching
+                        // (once as container via implicit map, once as individual elements)
+                        if i+1 &lt; len(c.steps) &amp;&amp; c.steps[i+1].op == "key" </span><span class="cov8" title="1">{
+                                if candidates, ok := obj.([]interface{}); ok </span><span class="cov8" title="1">{
+                                        filtered := []interface{}{}
+                                        for _, cand := range candidates </span><span class="cov8" title="1">{
+                                                // Filter out Slices (but keep Maps and others)
+                                                // because get_key on Slice iterates children, which are already in candidates
+                                                v := reflect.ValueOf(cand)
+                                                if v.Kind() != reflect.Slice </span><span class="cov8" title="1">{
+                                                        filtered = append(filtered, cand)
+                                                }</span>
+                                        }
+                                        <span class="cov8" title="1">obj = filtered</span>
+                                }
+                        }
+                case "func":<span class="cov8" title="1">
+                        // Handle function calls like length()
+                        // For function calls like $.length(), the key is the function name (e.g., "length")
+                        // For path-based function calls like $.store.book.length(), the key is empty
+                        // and we need to evaluate the function on the current object
+                        if len(s.key) &gt; 0 </span><span class="cov8" title="1">{
+                                // This case handles paths like $.store.book.length() where the function
+                                // is called on the result of the previous path step
+                                obj, err = eval_func(obj, s.key)
+                                if err != nil </span><span class="cov8" title="1">{
+                                        return nil, err
+                                }</span>
+                        } else<span class="cov0" title="0"> {
+                                // This case handles direct function calls like $.length() or @.length()
+                                obj, err = eval_func(obj, s.key)
+                                if err != nil </span><span class="cov0" title="0">{
+                                        return nil, err
+                                }</span>
+                        }
+                default:<span class="cov0" title="0">
+                        return nil, fmt.Errorf("unsupported jsonpath operation: %s", s.op)</span>
+                }
+        }
+        <span class="cov8" title="1">return obj, nil</span>
+}
+
+func tokenize(query string) ([]string, error) <span class="cov8" title="1">{
+        tokens := []string{}
+        //        token_start := false
+        //        token_end := false
+        token := ""
+        quoteChar := rune(0)
+
+        // fmt.Println("-------------------------------------------------- start")
+        for idx, x := range query </span><span class="cov8" title="1">{
+                if quoteChar != 0 </span><span class="cov8" title="1">{
+                        if x == quoteChar </span><span class="cov8" title="1">{
+                                quoteChar = 0
+                        }</span> else<span class="cov8" title="1"> {
+                                token += string(x)
+                        }</span>
+
+                        <span class="cov8" title="1">continue</span>
+                } else<span class="cov8" title="1"> if x == '"' </span><span class="cov8" title="1">{
+                        if token == "." </span><span class="cov8" title="1">{
+                                token = ""
+                        }</span>
+
+                        <span class="cov8" title="1">quoteChar = x
+                        continue</span>
+                }
+
+                <span class="cov8" title="1">token += string(x)
+                // //fmt.Printf("idx: %d, x: %s, token: %s, tokens: %v\n", idx, string(x), token, tokens)
+                if idx == 0 </span><span class="cov8" title="1">{
+                        if token == "$" || token == "@" </span><span class="cov8" title="1">{
+                                tokens = append(tokens, token[:])
+                                token = ""
+                                continue</span>
+                        } else<span class="cov8" title="1"> {
+                                return nil, fmt.Errorf("should start with '$'")
+                        }</span>
+                }
+                <span class="cov8" title="1">if token == "." </span><span class="cov8" title="1">{
+                        continue</span>
+                } else<span class="cov8" title="1"> if token == ".." </span><span class="cov8" title="1">{
+                        if len(tokens) == 0 || tokens[len(tokens)-1] != ".." </span><span class="cov8" title="1">{
+                                tokens = append(tokens, "..")
+                        }</span>
+                        <span class="cov8" title="1">token = "."
+                        continue</span>
+                } else<span class="cov8" title="1"> {
+                        // fmt.Println("else: ", string(x), token)
+                        if strings.Contains(token, "[") </span><span class="cov8" title="1">{
+                                // fmt.Println(" contains [ ")
+                                if x == ']' &amp;&amp; !strings.HasSuffix(token, "\\]") </span><span class="cov8" title="1">{
+                                        if token[0] == '.' </span><span class="cov8" title="1">{
+                                                tokens = append(tokens, token[1:])
+                                        }</span> else<span class="cov8" title="1"> {
+                                                tokens = append(tokens, token[:])
+                                        }</span>
+                                        <span class="cov8" title="1">token = ""
+                                        continue</span>
+                                }
+                        } else<span class="cov8" title="1"> {
+                                // fmt.Println(" doesn't contains [ ")
+                                if x == '.' </span><span class="cov8" title="1">{
+                                        if token[0] == '.' </span><span class="cov8" title="1">{
+                                                tokens = append(tokens, token[1:len(token)-1])
+                                        }</span> else<span class="cov8" title="1"> {
+                                                tokens = append(tokens, token[:len(token)-1])
+                                        }</span>
+                                        <span class="cov8" title="1">token = "."
+                                        continue</span>
+                                }
+                        }
+                }
+        }
+
+        <span class="cov8" title="1">if quoteChar != 0 </span><span class="cov8" title="1">{
+                token = string(quoteChar) + token
+        }</span>
+
+        <span class="cov8" title="1">if len(token) &gt; 0 </span><span class="cov8" title="1">{
+                if token[0] == '.' </span><span class="cov8" title="1">{
+                        token = token[1:]
+                        if token != "*" </span><span class="cov8" title="1">{
+                                tokens = append(tokens, token[:])
+                        }</span> else<span class="cov8" title="1"> if len(tokens) &gt; 0 &amp;&amp; tokens[len(tokens)-1] == ".." </span>{<span class="cov8" title="1">
+                                // $..* means recursive descent with scan, * is redundant after ..
+                                // Don't add * as separate token
+                        }</span> else<span class="cov8" title="1"> if tokens[len(tokens)-1] != "*" </span><span class="cov8" title="1">{
+                                tokens = append(tokens, token[:])
+                        }</span>
+                } else<span class="cov8" title="1"> {
+                        if token != "*" </span><span class="cov8" title="1">{
+                                tokens = append(tokens, token[:])
+                        }</span> else<span class="cov0" title="0"> if len(tokens) &gt; 0 &amp;&amp; tokens[len(tokens)-1] == ".." </span>{<span class="cov0" title="0">
+                                // $..* means recursive descent with scan, * is redundant after ..
+                                // Don't add * as separate token
+                        }</span> else<span class="cov0" title="0"> if tokens[len(tokens)-1] != "*" </span><span class="cov0" title="0">{
+                                tokens = append(tokens, token[:])
+                        }</span>
+                }
+        }
+        // fmt.Println("finished tokens: ", tokens)
+        // fmt.Println("================================================= done ")
+        <span class="cov8" title="1">return tokens, nil</span>
+}
+
+/*
+op: "root", "key", "idx", "range", "filter", "scan"
+*/
+func parse_token(token string) (op string, key string, args interface{}, err error) <span class="cov8" title="1">{
+        if token == "$" </span><span class="cov8" title="1">{
+                return "root", "$", nil, nil
+        }</span>
+        <span class="cov8" title="1">if token == "*" </span><span class="cov8" title="1">{
+                return "scan", "*", nil, nil
+        }</span>
+        <span class="cov8" title="1">if token == ".." </span><span class="cov8" title="1">{
+                return "recursive", "..", nil, nil
+        }</span>
+
+        <span class="cov8" title="1">bracket_idx := strings.Index(token, "[")
+        if bracket_idx &lt; 0 </span><span class="cov8" title="1">{
+                // Check for function call like length()
+                if strings.HasSuffix(token, "()") </span><span class="cov8" title="1">{
+                        funcName := strings.TrimSuffix(token, "()")
+                        return "func", funcName, nil, nil
+                }</span>
+                <span class="cov8" title="1">return "key", token, nil, nil</span>
+        } else<span class="cov8" title="1"> {
+                key = token[:bracket_idx]
+                tail := token[bracket_idx:]
+                if len(tail) &lt; 3 </span><span class="cov8" title="1">{
+                        err = fmt.Errorf("len(tail) should &gt;=3, %v", tail)
+                        return
+                }</span>
+                <span class="cov8" title="1">tail = tail[1 : len(tail)-1]
+
+                //fmt.Println(key, tail)
+                if strings.HasPrefix(tail, "?") </span><span class="cov8" title="1">{
+                        // filter -------------------------------------------------
+                        op = "filter"
+                        // Remove leading ? - the content is everything after ?
+                        filterContent := tail[1:]
+                        // Handle filters like [?( @.isbn )] - remove outer parentheses if present
+                        filterContent = strings.TrimSpace(filterContent)
+                        if strings.HasPrefix(filterContent, "(") &amp;&amp; strings.HasSuffix(filterContent, ")") </span><span class="cov8" title="1">{
+                                // Remove outer parentheses
+                                inner := filterContent[1 : len(filterContent)-1]
+                                filterContent = strings.TrimSpace(inner)
+                        }</span>
+                        <span class="cov8" title="1">args = filterContent
+                        return</span>
+                } else<span class="cov8" title="1"> if strings.Contains(tail, ":") </span><span class="cov8" title="1">{
+                        // range ----------------------------------------------
+                        op = "range"
+                        tails := strings.Split(tail, ":")
+                        if len(tails) != 2 </span><span class="cov0" title="0">{
+                                err = fmt.Errorf("only support one range(from, to): %v", tails)
+                                return
+                        }</span>
+                        <span class="cov8" title="1">var frm interface{}
+                        var to interface{}
+                        if frm, err = strconv.Atoi(strings.Trim(tails[0], " ")); err != nil </span><span class="cov8" title="1">{
+                                if strings.Trim(tails[0], " ") == "" </span><span class="cov8" title="1">{
+                                        err = nil
+                                }</span>
+                                <span class="cov8" title="1">frm = nil</span>
+                        }
+                        <span class="cov8" title="1">if to, err = strconv.Atoi(strings.Trim(tails[1], " ")); err != nil </span><span class="cov8" title="1">{
+                                if strings.Trim(tails[1], " ") == "" </span><span class="cov8" title="1">{
+                                        err = nil
+                                }</span>
+                                <span class="cov8" title="1">to = nil</span>
+                        }
+                        <span class="cov8" title="1">args = [2]interface{}{frm, to}
+                        return</span>
+                } else<span class="cov8" title="1"> if tail == "*" </span><span class="cov8" title="1">{
+                        op = "range"
+                        args = [2]interface{}{nil, nil}
+                        return
+                }</span> else<span class="cov8" title="1"> {
+                        // idx ------------------------------------------------
+                        op = "idx"
+                        res := []int{}
+                        for _, x := range strings.Split(tail, ",") </span><span class="cov8" title="1">{
+                                if i, err := strconv.Atoi(strings.Trim(x, " ")); err == nil </span><span class="cov8" title="1">{
+                                        res = append(res, i)
+                                }</span> else<span class="cov0" title="0"> {
+                                        return "", "", nil, err
+                                }</span>
+                        }
+                        <span class="cov8" title="1">args = res</span>
+                }
+        }
+        <span class="cov8" title="1">return op, key, args, nil</span>
+}
+
+func filter_get_from_explicit_path(obj interface{}, path string) (interface{}, error) <span class="cov8" title="1">{
+        steps, err := tokenize(path)
+        //fmt.Println("f: steps: ", steps, err)
+        //fmt.Println(path, steps)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">if steps[0] != "@" &amp;&amp; steps[0] != "$" </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("$ or @ should in front of path")
+        }</span>
+        <span class="cov8" title="1">steps = steps[1:]
+        xobj := obj
+        //fmt.Println("f: xobj", xobj)
+        for _, s := range steps </span><span class="cov8" title="1">{
+                op, key, args, err := parse_token(s)
+                if err != nil </span><span class="cov8" title="1">{
+                        return nil, err
+                }</span>
+                // "key", "idx"
+                <span class="cov8" title="1">switch op </span>{
+                case "key":<span class="cov8" title="1">
+                        xobj, err = get_key(xobj, key)
+                        if err != nil </span><span class="cov8" title="1">{
+                                return nil, err
+                        }</span>
+                case "idx":<span class="cov8" title="1">
+                        if len(args.([]int)) != 1 </span><span class="cov0" title="0">{
+                                return nil, fmt.Errorf("don't support multiple index in filter")
+                        }</span>
+                        <span class="cov8" title="1">xobj, err = get_key(xobj, key)
+                        if err != nil </span><span class="cov0" title="0">{
+                                return nil, err
+                        }</span>
+                        <span class="cov8" title="1">xobj, err = get_idx(xobj, args.([]int)[0])
+                        if err != nil </span><span class="cov8" title="1">{
+                                return nil, err
+                        }</span>
+                case "func":<span class="cov8" title="1">
+                        // Handle function calls like length()
+                        xobj, err = get_key(xobj, key)
+                        if err != nil </span><span class="cov8" title="1">{
+                                return nil, err
+                        }</span>
+                        <span class="cov8" title="1">xobj, err = eval_func(xobj, key)
+                        if err != nil </span><span class="cov0" title="0">{
+                                return nil, err
+                        }</span>
+                default:<span class="cov0" title="0">
+                        return nil, fmt.Errorf("unsupported jsonpath operation %s in filter", op)</span>
+                }
+        }
+        <span class="cov8" title="1">return xobj, nil</span>
+}
+
+func get_key(obj interface{}, key string) (interface{}, error) <span class="cov8" title="1">{
+        if reflect.TypeOf(obj) == nil </span><span class="cov8" title="1">{
+                return nil, ErrGetFromNullObj
+        }</span>
+        <span class="cov8" title="1">value := reflect.ValueOf(obj)
+        switch value.Kind() </span>{
+        case reflect.Map:<span class="cov8" title="1">
+                // if obj came from stdlib json, its highly likely to be a map[string]interface{}
+                // in which case we can save having to iterate the map keys to work out if the
+                // key exists
+                if jsonMap, ok := obj.(map[string]interface{}); ok </span><span class="cov8" title="1">{
+                        val, exists := jsonMap[key]
+                        if !exists </span><span class="cov8" title="1">{
+                                return nil, fmt.Errorf("key error: %s not found in object", key)
+                        }</span>
+                        <span class="cov8" title="1">return val, nil</span>
+                }
+                <span class="cov8" title="1">for _, kv := range value.MapKeys() </span><span class="cov8" title="1">{
+                        //fmt.Println(kv.String())
+                        if kv.String() == key </span><span class="cov8" title="1">{
+                                return value.MapIndex(kv).Interface(), nil
+                        }</span>
+                }
+                <span class="cov0" title="0">return nil, fmt.Errorf("key error: %s not found in object", key)</span>
+        case reflect.Slice:<span class="cov8" title="1">
+                // slice we should get from all objects in it.
+                // if key is empty, return the slice itself (for root array filtering)
+                if key == "" </span><span class="cov8" title="1">{
+                        return obj, nil
+                }</span>
+                <span class="cov8" title="1">res := []interface{}{}
+                for i := 0; i &lt; value.Len(); i++ </span><span class="cov8" title="1">{
+                        tmp, _ := get_idx(obj, i)
+                        if v, err := get_key(tmp, key); err == nil </span><span class="cov8" title="1">{
+                                res = append(res, v)
+                        }</span>
+                }
+                <span class="cov8" title="1">return res, nil</span>
+        case reflect.Ptr:<span class="cov8" title="1">
+                // Unwrap pointer
+                realValue := value.Elem()
+
+                if !realValue.IsValid() </span><span class="cov0" title="0">{
+                        return nil, fmt.Errorf("null pointer")
+                }</span>
+
+                <span class="cov8" title="1">return get_key(realValue.Interface(), key)</span>
+        case reflect.Interface:<span class="cov0" title="0">
+                // Unwrap interface value
+                realValue := value.Elem()
+
+                return get_key(realValue.Interface(), key)</span>
+        case reflect.Struct:<span class="cov8" title="1">
+                for i := 0; i &lt; value.NumField(); i++ </span><span class="cov8" title="1">{
+                        valueField := value.Field(i)
+                        structField := value.Type().Field(i)
+
+                        // Embeded struct
+                        if valueField.Kind() == reflect.Struct &amp;&amp; structField.Anonymous </span><span class="cov8" title="1">{
+                                v, _ := get_key(valueField.Interface(), key)
+                                if v != nil </span><span class="cov8" title="1">{
+                                        return v, nil
+                                }</span>
+                        } else<span class="cov8" title="1"> {
+                                if structField.Name == key </span><span class="cov8" title="1">{
+                                        return valueField.Interface(), nil
+                                }</span>
+
+                                <span class="cov8" title="1">if tag := structField.Tag.Get("json"); tag != "" </span><span class="cov8" title="1">{
+                                        values := strings.Split(tag, ",")
+                                        for _, tagValue := range values </span><span class="cov8" title="1">{
+                                                // In the following cases json tag names should not be checked:
+                                                // ",omitempty", "-", "-,"
+                                                if (tagValue == "" &amp;&amp; len(values) == 2) || tagValue == "-" </span><span class="cov8" title="1">{
+                                                        break</span>
+                                                }
+                                                <span class="cov8" title="1">if tagValue != "omitempty" &amp;&amp; tagValue == key </span><span class="cov8" title="1">{
+                                                        return valueField.Interface(), nil
+                                                }</span>
+                                        }
+                                }
+                        }
+                }
+
+                <span class="cov8" title="1">return nil, fmt.Errorf("key error: %s not found in struct", key)</span>
+        default:<span class="cov8" title="1">
+                return nil, fmt.Errorf("object is not map")</span>
+        }
+}
+
+func get_idx(obj interface{}, idx int) (interface{}, error) <span class="cov8" title="1">{
+        switch reflect.TypeOf(obj).Kind() </span>{
+        case reflect.Slice:<span class="cov8" title="1">
+                length := reflect.ValueOf(obj).Len()
+                if idx &gt;= 0 </span><span class="cov8" title="1">{
+                        if idx &gt;= length </span><span class="cov8" title="1">{
+                                return nil, fmt.Errorf("index out of range: len: %v, idx: %v", length, idx)
+                        }</span>
+                        <span class="cov8" title="1">return reflect.ValueOf(obj).Index(idx).Interface(), nil</span>
+                } else<span class="cov8" title="1"> {
+                        // &lt; 0
+                        _idx := length + idx
+                        if _idx &lt; 0 </span><span class="cov8" title="1">{
+                                return nil, fmt.Errorf("index out of range: len: %v, idx: %v", length, idx)
+                        }</span>
+                        <span class="cov8" title="1">return reflect.ValueOf(obj).Index(_idx).Interface(), nil</span>
+                }
+        default:<span class="cov8" title="1">
+                return nil, fmt.Errorf("object is not Slice")</span>
+        }
+}
+
+func get_range(obj, frm, to interface{}) (interface{}, error) <span class="cov8" title="1">{
+        switch reflect.TypeOf(obj).Kind() </span>{
+        case reflect.Slice:<span class="cov8" title="1">
+                length := reflect.ValueOf(obj).Len()
+                _frm := 0
+                _to := length
+                if frm == nil </span><span class="cov8" title="1">{
+                        frm = 0
+                }</span>
+                <span class="cov8" title="1">if to == nil </span><span class="cov8" title="1">{
+                        to = length
+                }</span>
+                <span class="cov8" title="1">if fv, ok := frm.(int); ok == true </span><span class="cov8" title="1">{
+                        if fv &lt; 0 </span><span class="cov8" title="1">{
+                                _frm = length + fv
+                        }</span> else<span class="cov8" title="1"> {
+                                _frm = fv
+                        }</span>
+                }
+                <span class="cov8" title="1">if tv, ok := to.(int); ok == true </span><span class="cov8" title="1">{
+                        if tv &lt; 0 </span><span class="cov8" title="1">{
+                                _to = length + tv + 1
+                        }</span> else<span class="cov8" title="1"> {
+                                _to = tv
+                        }</span>
+                }
+                <span class="cov8" title="1">if _frm &lt; 0 || _frm &gt;= length </span><span class="cov8" title="1">{
+                        return nil, fmt.Errorf("index [from] out of range: len: %v, from: %v", length, frm)
+                }</span>
+                // Clamp _to to valid range [0, length] per RFC 9535
+                <span class="cov8" title="1">if _to &lt; 0 </span><span class="cov8" title="1">{
+                        _to = 0
+                }</span>
+                <span class="cov8" title="1">if _to &gt; length </span><span class="cov8" title="1">{
+                        _to = length
+                }</span>
+                //fmt.Println("_frm, _to: ", _frm, _to)
+                <span class="cov8" title="1">res_v := reflect.ValueOf(obj).Slice(_frm, _to)
+                return res_v.Interface(), nil</span>
+        case reflect.Map:<span class="cov8" title="1">
+                // For wildcard [*] on maps, return all values
+                var res []interface{}
+                if jsonMap, ok := obj.(map[string]interface{}); ok </span><span class="cov8" title="1">{
+                        for _, v := range jsonMap </span><span class="cov8" title="1">{
+                                res = append(res, v)
+                        }</span>
+                        <span class="cov8" title="1">return res, nil</span>
+                }
+                <span class="cov0" title="0">keys := reflect.ValueOf(obj).MapKeys()
+                for _, k := range keys </span><span class="cov0" title="0">{
+                        res = append(res, reflect.ValueOf(obj).MapIndex(k).Interface())
+                }</span>
+                <span class="cov0" title="0">return res, nil</span>
+        default:<span class="cov8" title="1">
+                return nil, fmt.Errorf("object is not Slice")</span>
+        }
+}
+
+func regFilterCompile(rule string) (*regexp.Regexp, error) <span class="cov8" title="1">{
+        runes := []rune(rule)
+        if len(runes) &lt;= 2 </span><span class="cov8" title="1">{
+                return nil, errors.New("empty rule")
+        }</span>
+
+        <span class="cov8" title="1">if runes[0] != '/' || runes[len(runes)-1] != '/' </span><span class="cov8" title="1">{
+                return nil, errors.New("invalid syntax. should be in `/pattern/` form")
+        }</span>
+        <span class="cov8" title="1">runes = runes[1 : len(runes)-1]
+        return regexp.Compile(string(runes))</span>
+}
+
+func get_filtered(obj, root interface{}, filter string) ([]interface{}, error) <span class="cov8" title="1">{
+        lp, op, rp, err := parse_filter(filter)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov8" title="1">res := []interface{}{}
+
+        switch reflect.TypeOf(obj).Kind() </span>{
+        case reflect.Slice:<span class="cov8" title="1">
+                if op == "=~" </span><span class="cov8" title="1">{
+                        // regexp
+                        pat, err := regFilterCompile(rp)
+                        if err != nil </span><span class="cov0" title="0">{
+                                return nil, err
+                        }</span>
+
+                        <span class="cov8" title="1">for i := 0; i &lt; reflect.ValueOf(obj).Len(); i++ </span><span class="cov8" title="1">{
+                                tmp := reflect.ValueOf(obj).Index(i).Interface()
+                                ok, err := eval_reg_filter(tmp, root, lp, pat)
+                                if err != nil </span><span class="cov0" title="0">{
+                                        return nil, err
+                                }</span>
+                                <span class="cov8" title="1">if ok == true </span><span class="cov8" title="1">{
+                                        res = append(res, tmp)
+                                }</span>
+                        }
+                } else<span class="cov8" title="1"> {
+                        for i := 0; i &lt; reflect.ValueOf(obj).Len(); i++ </span><span class="cov8" title="1">{
+                                tmp := reflect.ValueOf(obj).Index(i).Interface()
+                                ok, err := eval_filter(tmp, root, lp, op, rp)
+                                if err != nil </span><span class="cov0" title="0">{
+                                        return nil, err
+                                }</span>
+                                <span class="cov8" title="1">if ok == true </span><span class="cov8" title="1">{
+                                        res = append(res, tmp)
+                                }</span>
+                        }
+                }
+                <span class="cov8" title="1">return res, nil</span>
+        case reflect.Map:<span class="cov8" title="1">
+                if op == "=~" </span><span class="cov8" title="1">{
+                        // regexp
+                        pat, err := regFilterCompile(rp)
+                        if err != nil </span><span class="cov0" title="0">{
+                                return nil, err
+                        }</span>
+
+                        <span class="cov8" title="1">for _, kv := range reflect.ValueOf(obj).MapKeys() </span><span class="cov8" title="1">{
+                                tmp := reflect.ValueOf(obj).MapIndex(kv).Interface()
+                                ok, err := eval_reg_filter(tmp, root, lp, pat)
+                                if err != nil </span><span class="cov0" title="0">{
+                                        return nil, err
+                                }</span>
+                                <span class="cov8" title="1">if ok == true </span><span class="cov0" title="0">{
+                                        res = append(res, tmp)
+                                }</span>
+                        }
+                } else<span class="cov8" title="1"> {
+                        for _, kv := range reflect.ValueOf(obj).MapKeys() </span><span class="cov8" title="1">{
+                                tmp := reflect.ValueOf(obj).MapIndex(kv).Interface()
+                                ok, err := eval_filter(tmp, root, lp, op, rp)
+                                if err != nil </span><span class="cov0" title="0">{
+                                        return nil, err
+                                }</span>
+                                <span class="cov8" title="1">if ok == true </span><span class="cov8" title="1">{
+                                        res = append(res, tmp)
+                                }</span>
+                        }
+                }
+        default:<span class="cov8" title="1">
+                return nil, fmt.Errorf("don't support filter on this type: %v", reflect.TypeOf(obj).Kind())</span>
+        }
+
+        <span class="cov8" title="1">return res, nil</span>
+}
+
+func get_scan(obj interface{}) (interface{}, error) <span class="cov8" title="1">{
+        if reflect.TypeOf(obj) == nil </span><span class="cov8" title="1">{
+                return nil, nil
+        }</span>
+        <span class="cov8" title="1">switch reflect.TypeOf(obj).Kind() </span>{
+        case reflect.Map:<span class="cov8" title="1">
+                // iterate over keys in sorted by length, then alphabetically
+                var res []interface{}
+                if jsonMap, ok := obj.(map[string]interface{}); ok </span><span class="cov8" title="1">{
+                        var sortedKeys []string
+                        for k := range jsonMap </span><span class="cov8" title="1">{
+                                sortedKeys = append(sortedKeys, k)
+                        }</span>
+                        <span class="cov8" title="1">sort.Slice(sortedKeys, func(i, j int) bool </span><span class="cov8" title="1">{
+                                if len(sortedKeys[i]) != len(sortedKeys[j]) </span><span class="cov0" title="0">{
+                                        return len(sortedKeys[i]) &lt; len(sortedKeys[j])
+                                }</span>
+                                <span class="cov8" title="1">return sortedKeys[i] &lt; sortedKeys[j]</span>
+                        })
+                        <span class="cov8" title="1">for _, k := range sortedKeys </span><span class="cov8" title="1">{
+                                res = append(res, jsonMap[k])
+                        }</span>
+                        <span class="cov8" title="1">return res, nil</span>
+                }
+                <span class="cov8" title="1">keys := reflect.ValueOf(obj).MapKeys()
+                sort.Slice(keys, func(i, j int) bool </span><span class="cov8" title="1">{
+                        ki, kj := keys[i].String(), keys[j].String()
+                        if len(ki) != len(kj) </span><span class="cov0" title="0">{
+                                return len(ki) &lt; len(kj)
+                        }</span>
+                        <span class="cov8" title="1">return ki &lt; kj</span>
+                })
+                <span class="cov8" title="1">for _, k := range keys </span><span class="cov8" title="1">{
+                        res = append(res, reflect.ValueOf(obj).MapIndex(k).Interface())
+                }</span>
+                <span class="cov8" title="1">return res, nil</span>
+        case reflect.Slice:<span class="cov8" title="1">
+                // slice we should get from all objects in it.
+                var res []interface{}
+                for i := 0; i &lt; reflect.ValueOf(obj).Len(); i++ </span><span class="cov8" title="1">{
+                        tmp := reflect.ValueOf(obj).Index(i).Interface()
+                        newObj, err := get_scan(tmp)
+                        if err != nil </span><span class="cov0" title="0">{
+                                return nil, err
+                        }</span>
+                        <span class="cov8" title="1">res = append(res, newObj.([]interface{})...)</span>
+                }
+                <span class="cov8" title="1">return res, nil</span>
+        default:<span class="cov8" title="1">
+                return nil, fmt.Errorf("object is not scannable: %v", reflect.TypeOf(obj).Kind())</span>
+        }
+}
+
+// @.isbn                 =&gt; @.isbn, exists, nil
+// @.price &lt; 10           =&gt; @.price, &lt;, 10
+// @.price &lt;= $.expensive =&gt; @.price, &lt;=, $.expensive
+// @.author =~ /.*REES/i  =&gt; @.author, match, /.*REES/i
+// count(@.book) &gt; 0      =&gt; count(@.book), &gt;, 0
+// match(@.author, 'REES') =&gt; match(@.author, 'REES'), exists, nil
+func parse_filter(filter string) (lp string, op string, rp string, err error) <span class="cov8" title="1">{
+        tmp := ""
+
+        stage := 0
+        quoteChar := rune(0)
+        parenDepth := 0
+        for idx, c := range filter </span><span class="cov8" title="1">{
+                switch c </span>{
+                case '\'':<span class="cov8" title="1">
+                        if quoteChar == 0 </span><span class="cov8" title="1">{
+                                quoteChar = c
+                        }</span> else<span class="cov8" title="1"> if c == quoteChar </span><span class="cov8" title="1">{
+                                quoteChar = 0
+                        }</span> else<span class="cov8" title="1"> {
+                                tmp += string(c)
+                        }</span>
+                        <span class="cov8" title="1">continue</span>
+                case '"':<span class="cov8" title="1">
+                        if quoteChar == 0 </span><span class="cov8" title="1">{
+                                quoteChar = c
+                        }</span> else<span class="cov8" title="1"> if c == quoteChar </span><span class="cov8" title="1">{
+                                quoteChar = 0
+                        }</span> else<span class="cov8" title="1"> {
+                                tmp += string(c)
+                        }</span>
+                        <span class="cov8" title="1">continue</span>
+                case '(':<span class="cov8" title="1">
+                        if quoteChar == 0 </span><span class="cov8" title="1">{
+                                parenDepth++
+                        }</span>
+                        <span class="cov8" title="1">tmp += string(c)
+                        continue</span>
+                case ')':<span class="cov8" title="1">
+                        if quoteChar == 0 </span><span class="cov8" title="1">{
+                                parenDepth--
+                        }</span>
+                        <span class="cov8" title="1">tmp += string(c)
+                        continue</span>
+                case ' ':<span class="cov8" title="1">
+                        if quoteChar != 0 || parenDepth &gt; 0 </span><span class="cov8" title="1">{
+                                // Inside quotes or parentheses, keep the space
+                                tmp += string(c)
+                                continue</span>
+                        }
+                        <span class="cov8" title="1">if tmp != "" </span><span class="cov8" title="1">{
+                                switch stage </span>{
+                                case 0:<span class="cov8" title="1">
+                                        lp = tmp</span>
+                                case 1:<span class="cov8" title="1">
+                                        op = tmp</span>
+                                case 2:<span class="cov8" title="1">
+                                        rp = tmp</span>
+                                }
+                                <span class="cov8" title="1">tmp = ""
+                                stage++
+                                if stage &gt; 2 </span><span class="cov8" title="1">{
+                                        return "", "", "", errors.New(fmt.Sprintf("invalid char at %d: `%c`", idx, c))
+                                }</span>
+                        }
+                default:<span class="cov8" title="1">
+                        tmp += string(c)</span>
+                }
+        }
+        <span class="cov8" title="1">if tmp != "" </span><span class="cov8" title="1">{
+                switch stage </span>{
+                case 0:<span class="cov8" title="1">
+                        lp = tmp
+                        if strings.HasSuffix(lp, ")") || stage == 0 </span><span class="cov8" title="1">{
+                                // Function call without operator, or simple expression without operator
+                                // set exists operator
+                                op = "exists"
+                        }</span>
+                case 1:<span class="cov8" title="1">
+                        op = tmp</span>
+                case 2:<span class="cov8" title="1">
+                        rp = tmp</span>
+                }
+        }
+        <span class="cov8" title="1">return lp, op, rp, err</span>
+}
+
+// func parse_filter_v1(filter string) (lp string, op string, rp string, err error) {
+//         tmp := ""
+//         istoken := false
+//         for _, c := range filter {
+//                 if istoken == false &amp;&amp; c != ' ' {
+//                         istoken = true
+//                 }
+//                 if istoken == true &amp;&amp; c == ' ' {
+//                         istoken = false
+//                 }
+//                 if istoken == true {
+//                         tmp += string(c)
+//                 }
+//                 if istoken == false &amp;&amp; tmp != "" {
+//                         if lp == "" {
+//                                 lp = tmp[:]
+//                                 tmp = ""
+//                         } else if op == "" {
+//                                 op = tmp[:]
+//                                 tmp = ""
+//                         } else if rp == "" {
+//                                 rp = tmp[:]
+//                                 tmp = ""
+//                         }
+//                 }
+//         }
+//         if tmp != "" &amp;&amp; lp == "" &amp;&amp; op == "" &amp;&amp; rp == "" {
+//                 lp = tmp[:]
+//                 op = "exists"
+//                 rp = ""
+//                 err = nil
+//                 return
+//         } else if tmp != "" &amp;&amp; rp == "" {
+//                 rp = tmp[:]
+//                 tmp = ""
+//         }
+//         return lp, op, rp, err
+// }
+
+func eval_reg_filter(obj, root interface{}, lp string, pat *regexp.Regexp) (res bool, err error) <span class="cov8" title="1">{
+        if pat == nil </span><span class="cov8" title="1">{
+                return false, errors.New("nil pat")
+        }</span>
+        <span class="cov8" title="1">lp_v, err := get_lp_v(obj, root, lp)
+        if err != nil </span><span class="cov8" title="1">{
+                return false, err
+        }</span>
+        <span class="cov8" title="1">switch v := lp_v.(type) </span>{
+        case string:<span class="cov8" title="1">
+                return pat.MatchString(v), nil</span>
+        default:<span class="cov8" title="1">
+                return false, errors.New("only string can match with regular expression")</span>
+        }
+}
+
+func get_lp_v(obj, root interface{}, lp string) (interface{}, error) <span class="cov8" title="1">{
+        // Check if lp is a function call like count(@.xxx) or match(@.xxx, pattern)
+        if strings.HasSuffix(lp, ")") </span><span class="cov8" title="1">{
+                return eval_filter_func(obj, root, lp)
+        }</span>
+
+        <span class="cov8" title="1">var lp_v interface{}
+        if strings.HasPrefix(lp, "@.") </span><span class="cov8" title="1">{
+                return filter_get_from_explicit_path(obj, lp)
+        }</span> else<span class="cov8" title="1"> if strings.HasPrefix(lp, "$.") </span><span class="cov8" title="1">{
+                return filter_get_from_explicit_path(root, lp)
+        }</span> else<span class="cov8" title="1"> {
+                lp_v = lp
+        }</span>
+        <span class="cov8" title="1">return lp_v, nil</span>
+}
+
+// eval_filter_func evaluates function calls in filter expressions
+func eval_filter_func(obj, root interface{}, expr string) (interface{}, error) <span class="cov8" title="1">{
+        // Find the first ( that starts the function arguments
+        parenIdx := -1
+        for i, c := range expr </span><span class="cov8" title="1">{
+                if c == '(' </span><span class="cov8" title="1">{
+                        parenIdx = i
+                        break</span>
+                }
+        }
+
+        <span class="cov8" title="1">if parenIdx &lt; 0 </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("invalid function call: %s", expr)
+        }</span>
+
+        <span class="cov8" title="1">funcName := strings.TrimSpace(expr[:parenIdx])
+
+        // Find the matching closing parenthesis
+        argsStart := parenIdx + 1
+        argsEnd := -1
+        depth := 1
+        for i := argsStart; i &lt; len(expr); i++ </span><span class="cov8" title="1">{
+                if expr[i] == '(' </span><span class="cov0" title="0">{
+                        depth++
+                }</span> else<span class="cov8" title="1"> if expr[i] == ')' </span><span class="cov8" title="1">{
+                        depth--
+                        if depth == 0 </span><span class="cov8" title="1">{
+                                argsEnd = i
+                                break</span>
+                        }
+                }
+        }
+
+        <span class="cov8" title="1">if argsEnd &lt; 0 </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("mismatched parentheses in function call: %s", expr)
+        }</span>
+
+        <span class="cov8" title="1">argsStr := expr[argsStart:argsEnd]
+
+        // Split arguments by comma (respecting nested parentheses and quotes)
+        var args []string
+        current := ""
+        argDepth := 0
+        quoteChar := rune(0)
+        for _, c := range argsStr </span><span class="cov8" title="1">{
+                if quoteChar != 0 </span><span class="cov8" title="1">{
+                        if c == quoteChar </span><span class="cov8" title="1">{
+                                quoteChar = 0
+                        }</span>
+                        <span class="cov8" title="1">current += string(c)
+                        continue</span>
+                }
+                <span class="cov8" title="1">if c == '"' || c == '\'' </span><span class="cov8" title="1">{
+                        quoteChar = c
+                        current += string(c)
+                        continue</span>
+                }
+                <span class="cov8" title="1">if c == '(' </span><span class="cov0" title="0">{
+                        argDepth++
+                }</span> else<span class="cov8" title="1"> if c == ')' </span><span class="cov0" title="0">{
+                        argDepth--
+                }</span> else<span class="cov8" title="1"> if c == ',' &amp;&amp; argDepth == 0 </span><span class="cov8" title="1">{
+                        args = append(args, strings.TrimSpace(current))
+                        current = ""
+                        continue</span>
+                }
+                <span class="cov8" title="1">current += string(c)</span>
+        }
+        <span class="cov8" title="1">if current != "" </span><span class="cov8" title="1">{
+                args = append(args, strings.TrimSpace(current))
+        }</span>
+
+        // Evaluate function based on name
+        <span class="cov8" title="1">switch funcName </span>{
+        case "count":<span class="cov8" title="1">
+                return eval_count(obj, root, args)</span>
+        case "match":<span class="cov8" title="1">
+                return eval_match(obj, root, args)</span>
+        case "search":<span class="cov8" title="1">
+                return eval_search(obj, root, args)</span>
+        case "length":<span class="cov0" title="0">
+                return eval_length(obj, root, args)</span>
+        default:<span class="cov8" title="1">
+                return nil, fmt.Errorf("unsupported function: %s()", funcName)</span>
+        }
+}
+
+// eval_count evaluates count() function - returns the count of nodes in a nodelist
+func eval_count(obj, root interface{}, args []string) (interface{}, error) <span class="cov8" title="1">{
+        if len(args) != 1 </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("count() requires 1 argument, got %d", len(args))
+        }</span>
+
+        <span class="cov8" title="1">arg := args[0]
+
+        // Special case: count(@) or count('') returns the length of the root array
+        if arg == "@" || arg == "" </span><span class="cov8" title="1">{
+                // Use root to get the array length
+                if root == nil </span><span class="cov8" title="1">{
+                        return 0, nil
+                }</span>
+                <span class="cov8" title="1">rv := reflect.ValueOf(root)
+                switch rv.Kind() </span>{
+                case reflect.Array, reflect.Slice:<span class="cov8" title="1">
+                        return rv.Len(), nil</span>
+                default:<span class="cov8" title="1">
+                        // Root is not an array, count as 1
+                        return 1, nil</span>
+                }
+        }
+
+        <span class="cov8" title="1">var nodeset interface{}
+        if strings.HasPrefix(arg, "@.") </span><span class="cov8" title="1">{
+                nodeset, _ = filter_get_from_explicit_path(obj, arg)
+        }</span> else<span class="cov8" title="1"> if strings.HasPrefix(arg, "$.") </span><span class="cov8" title="1">{
+                nodeset, _ = filter_get_from_explicit_path(root, arg)
+        }</span> else<span class="cov8" title="1"> {
+                // Literal string - treat as string length
+                return len(arg), nil
+        }</span>
+
+        // Count nodes in the nodelist
+        <span class="cov8" title="1">if nodeset == nil </span><span class="cov0" title="0">{
+                return 0, nil
+        }</span>
+        <span class="cov8" title="1">switch v := nodeset.(type) </span>{
+        case []interface{}:<span class="cov8" title="1">
+                return len(v), nil</span>
+        default:<span class="cov8" title="1">
+                // Single node, count as 1
+                return 1, nil</span>
+        }
+}
+
+// eval_match evaluates match() function - regex with implicit anchoring (^pattern$)
+func eval_match(obj, root interface{}, args []string) (interface{}, error) <span class="cov8" title="1">{
+        if len(args) != 2 </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("match() requires 2 arguments (string, pattern), got %d", len(args))
+        }</span>
+
+        // Get the string value
+        <span class="cov8" title="1">var strVal string
+        if strings.HasPrefix(args[0], "@.") </span><span class="cov8" title="1">{
+                v, err := filter_get_from_explicit_path(obj, args[0])
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+                <span class="cov8" title="1">if v == nil </span><span class="cov8" title="1">{
+                        return false, nil
+                }</span>
+                <span class="cov8" title="1">strVal = fmt.Sprintf("%v", v)</span>
+        } else<span class="cov8" title="1"> if strings.HasPrefix(args[0], "$.") </span><span class="cov8" title="1">{
+                v, err := filter_get_from_explicit_path(root, args[0])
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+                <span class="cov8" title="1">if v == nil </span><span class="cov8" title="1">{
+                        return false, nil
+                }</span>
+                <span class="cov0" title="0">strVal = fmt.Sprintf("%v", v)</span>
+        } else<span class="cov8" title="1"> {
+                strVal = args[0]
+        }</span>
+
+        // Get the pattern (remove quotes if present)
+        <span class="cov8" title="1">pattern := args[1]
+        pattern = strings.Trim(pattern, `"'`)
+
+        // Compile regex with implicit anchoring (^pattern$)
+        re, err := regexp.Compile("^" + pattern + "$")
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("invalid regex pattern: %v", err)
+        }</span>
+
+        <span class="cov8" title="1">return re.MatchString(strVal), nil</span>
+}
+
+// eval_search evaluates search() function - regex without anchoring
+func eval_search(obj, root interface{}, args []string) (interface{}, error) <span class="cov8" title="1">{
+        if len(args) != 2 </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("search() requires 2 arguments (string, pattern), got %d", len(args))
+        }</span>
+
+        // Get the string value
+        <span class="cov8" title="1">var strVal string
+        if strings.HasPrefix(args[0], "@.") </span><span class="cov8" title="1">{
+                v, err := filter_get_from_explicit_path(obj, args[0])
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+                <span class="cov8" title="1">if v == nil </span><span class="cov8" title="1">{
+                        return false, nil
+                }</span>
+                <span class="cov8" title="1">strVal = fmt.Sprintf("%v", v)</span>
+        } else<span class="cov8" title="1"> if strings.HasPrefix(args[0], "$.") </span><span class="cov8" title="1">{
+                v, err := filter_get_from_explicit_path(root, args[0])
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+                <span class="cov8" title="1">if v == nil </span><span class="cov8" title="1">{
+                        return false, nil
+                }</span>
+                <span class="cov0" title="0">strVal = fmt.Sprintf("%v", v)</span>
+        } else<span class="cov8" title="1"> {
+                strVal = args[0]
+        }</span>
+
+        // Get the pattern (remove quotes if present)
+        <span class="cov8" title="1">pattern := args[1]
+        pattern = strings.Trim(pattern, `"'`)
+
+        // Compile regex without anchoring
+        re, err := regexp.Compile(pattern)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("invalid regex pattern: %v", err)
+        }</span>
+
+        <span class="cov8" title="1">return re.MatchString(strVal), nil</span>
+}
+
+// eval_length evaluates length() function in filter context
+func eval_length(obj, root interface{}, args []string) (interface{}, error) <span class="cov8" title="1">{
+        if len(args) != 1 </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("length() requires 1 argument, got %d", len(args))
+        }</span>
+
+        <span class="cov8" title="1">var val interface{}
+        if strings.HasPrefix(args[0], "@.") </span><span class="cov8" title="1">{
+                val, _ = filter_get_from_explicit_path(obj, args[0])
+        }</span> else<span class="cov8" title="1"> if strings.HasPrefix(args[0], "$.") </span><span class="cov8" title="1">{
+                val, _ = filter_get_from_explicit_path(root, args[0])
+        }</span> else<span class="cov8" title="1"> {
+                val = args[0]
+        }</span>
+
+        <span class="cov8" title="1">return get_length(val)</span>
+}
+
+func eval_filter(obj, root interface{}, lp, op, rp string) (res bool, err error) <span class="cov8" title="1">{
+        lp_v, err := get_lp_v(obj, root, lp)
+
+        // If op is empty, treat it as an exists check (truthy check)
+        if op == "" </span><span class="cov8" title="1">{
+                op = "exists"
+        }</span>
+
+        <span class="cov8" title="1">if op == "exists" </span><span class="cov8" title="1">{
+                // If lp_v is a function call (contains parentheses), evaluate it
+                // and return the boolean result
+                if strings.HasSuffix(lp, ")") </span><span class="cov8" title="1">{
+                        // It's a function call, get_lp_v should have evaluated it
+                        // and returned the result (which could be bool, int, etc.)
+                        switch v := lp_v.(type) </span>{
+                        case bool:<span class="cov8" title="1">
+                                return v, nil</span>
+                        case int, int8, int16, int32, int64, float32, float64:<span class="cov0" title="0">
+                                // Non-zero values are truthy
+                                return v != 0, nil</span>
+                        default:<span class="cov0" title="0">
+                                // For other types, check if not nil
+                                return lp_v != nil, nil</span>
+                        }
+                }
+                <span class="cov8" title="1">return lp_v != nil, nil</span>
+        } else<span class="cov8" title="1"> if op == "=~" </span><span class="cov8" title="1">{
+                return false, fmt.Errorf("not implemented yet")
+        }</span> else<span class="cov8" title="1"> {
+                var rp_v interface{}
+                if strings.HasPrefix(rp, "@.") </span><span class="cov8" title="1">{
+                        rp_v, err = filter_get_from_explicit_path(obj, rp)
+                }</span> else<span class="cov8" title="1"> if strings.HasPrefix(rp, "$.") </span><span class="cov8" title="1">{
+                        rp_v, err = filter_get_from_explicit_path(root, rp)
+                }</span> else<span class="cov8" title="1"> {
+                        rp_v = rp
+                }</span>
+                //fmt.Printf("lp_v: %v, rp_v: %v\n", lp_v, rp_v)
+                <span class="cov8" title="1">return cmp_any(lp_v, rp_v, op)</span>
+        }
+}
+
+// eval_func evaluates function calls like length()
+func eval_func(obj interface{}, funcName string) (interface{}, error) <span class="cov8" title="1">{
+        switch funcName </span>{
+        case "length":<span class="cov8" title="1">
+                return get_length(obj)</span>
+        default:<span class="cov8" title="1">
+                return nil, fmt.Errorf("unsupported function: %s()", funcName)</span>
+        }
+}
+
+// get_length returns the length of an array, string, or map
+func get_length(obj interface{}) (interface{}, error) <span class="cov8" title="1">{
+        if obj == nil </span><span class="cov8" title="1">{
+                return nil, nil
+        }</span>
+        <span class="cov8" title="1">switch v := obj.(type) </span>{
+        case []interface{}:<span class="cov8" title="1">
+                return len(v), nil</span>
+        case string:<span class="cov8" title="1">
+                return len(v), nil</span>
+        case map[string]interface{}:<span class="cov8" title="1">
+                return len(v), nil</span>
+        default:<span class="cov8" title="1">
+                // Try to use reflection for other types
+                rv := reflect.ValueOf(obj)
+                switch rv.Kind() </span>{
+                case reflect.Array, reflect.Slice, reflect.Map, reflect.String:<span class="cov8" title="1">
+                        return rv.Len(), nil</span>
+                default:<span class="cov8" title="1">
+                        return nil, fmt.Errorf("length() not supported for type: %T", obj)</span>
+                }
+        }
+}
+
+func isNumber(o interface{}) bool <span class="cov8" title="1">{
+        switch v := o.(type) </span>{
+        case int, int8, int16, int32, int64:<span class="cov8" title="1">
+                return true</span>
+        case uint, uint8, uint16, uint32, uint64:<span class="cov8" title="1">
+                return true</span>
+        case float32, float64:<span class="cov8" title="1">
+                return true</span>
+        case string:<span class="cov8" title="1">
+                _, err := strconv.ParseFloat(v, 64)
+                if err == nil </span><span class="cov8" title="1">{
+                        return true
+                }</span> else<span class="cov8" title="1"> {
+                        return false
+                }</span>
+        }
+        <span class="cov8" title="1">return false</span>
+}
+
+func cmp_any(obj1, obj2 interface{}, op string) (bool, error) <span class="cov8" title="1">{
+        switch op </span>{
+        case "&lt;", "&lt;=", "==", "&gt;=", "&gt;":<span class="cov8" title="1"></span>
+        default:<span class="cov8" title="1">
+                return false, fmt.Errorf("op should only be &lt;, &lt;=, ==, &gt;= and &gt;")</span>
+        }
+
+        <span class="cov8" title="1">var exp string
+        if isNumber(obj1) &amp;&amp; isNumber(obj2) </span><span class="cov8" title="1">{
+                exp = fmt.Sprintf(`%v %s %v`, obj1, op, obj2)
+        }</span> else<span class="cov8" title="1"> {
+                exp = fmt.Sprintf(`"%v" %s "%v"`, obj1, op, obj2)
+        }</span>
+        //fmt.Println("exp: ", exp)
+        <span class="cov8" title="1">fset := token.NewFileSet()
+        res, err := types.Eval(fset, nil, 0, exp)
+        if err != nil </span><span class="cov0" title="0">{
+                return false, err
+        }</span>
+        <span class="cov8" title="1">if res.IsValue() == false || (res.Value.String() != "false" &amp;&amp; res.Value.String() != "true") </span><span class="cov0" title="0">{
+                return false, fmt.Errorf("result should only be true or false")
+        }</span>
+        <span class="cov8" title="1">if res.Value.String() == "true" </span><span class="cov8" title="1">{
+                return true, nil
+        }</span>
+
+        <span class="cov8" title="1">return false, nil</span>
+}
+
+func getAllDescendants(obj interface{}) []interface{} <span class="cov8" title="1">{
+        res := []interface{}{}
+        var recurse func(curr interface{})
+        recurse = func(curr interface{}) </span><span class="cov8" title="1">{
+                res = append(res, curr)
+                v := reflect.ValueOf(curr)
+                if !v.IsValid() </span><span class="cov0" title="0">{
+                        return
+                }</span>
+
+                <span class="cov8" title="1">kind := v.Kind()
+                if kind == reflect.Ptr </span><span class="cov8" title="1">{
+                        v = v.Elem()
+                        if !v.IsValid() </span><span class="cov8" title="1">{
+                                return
+                        }</span>
+                        <span class="cov8" title="1">kind = v.Kind()</span>
+                }
+
+                <span class="cov8" title="1">switch kind </span>{
+                case reflect.Map:<span class="cov8" title="1">
+                        for _, k := range v.MapKeys() </span><span class="cov8" title="1">{
+                                recurse(v.MapIndex(k).Interface())
+                        }</span>
+                case reflect.Slice, reflect.Array:<span class="cov8" title="1">
+                        for i := 0; i &lt; v.Len(); i++ </span><span class="cov8" title="1">{
+                                recurse(v.Index(i).Interface())
+                        }</span>
+                }
+        }
+        <span class="cov8" title="1">recurse(obj)
+        return res</span>
+}
+
+// ============================================================================
+// Set/Update Functions
+// ============================================================================
+
+// JsonPathSet sets a value at the specified JSONPath and returns a new object
+// (deep copy approach - original object is not modified)
+func JsonPathSet(obj interface{}, jpath string, value interface{}) (interface{}, error) <span class="cov8" title="1">{
+        c, err := Compile(jpath)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">return c.Set(obj, value)</span>
+}
+
+// Set sets a value at the compiled path and returns a new object
+func (c *Compiled) Set(obj interface{}, value interface{}) (interface{}, error) <span class="cov8" title="1">{
+        // Deep copy the object first
+        copiedObj := deepCopy(obj)
+
+        // Check if path is valid
+        if len(c.steps) == 0 </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("empty path")
+        }</span>
+
+        // Navigate to parent and set the value
+        <span class="cov8" title="1">result, err := set_recursive(copiedObj, c.steps, 0, value)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">return result, nil</span>
+}
+
+// set_recursive recursively navigates to the target location and sets the value
+func set_recursive(obj interface{}, steps []step, idx int, value interface{}) (interface{}, error) <span class="cov8" title="1">{
+        if idx &gt;= len(steps) </span><span class="cov8" title="1">{
+                return value, nil
+        }</span>
+
+        <span class="cov8" title="1">step := steps[idx]
+
+        switch step.op </span>{
+        case "key":<span class="cov8" title="1">
+                return set_key(obj, step.key, steps, idx, value)</span>
+        case "idx":<span class="cov8" title="1">
+                return set_idx(obj, step, steps, idx, value)</span>
+        case "range":<span class="cov8" title="1">
+                return set_range(obj, step, steps, idx, value)</span>
+        default:<span class="cov8" title="1">
+                return nil, fmt.Errorf("unsupported operation for set: %s", step.op)</span>
+        }
+}
+
+// set_key sets a value by key in a map or struct
+func set_key(obj interface{}, key string, steps []step, idx int, value interface{}) (interface{}, error) <span class="cov8" title="1">{
+        if obj == nil </span><span class="cov8" title="1">{
+                return nil, ErrGetFromNullObj
+        }</span>
+
+        <span class="cov8" title="1">v := reflect.ValueOf(obj)
+        if !v.IsValid() </span><span class="cov0" title="0">{
+                return nil, ErrGetFromNullObj
+        }</span>
+
+        // Unwrap interface to get the underlying value
+        <span class="cov8" title="1">if v.Kind() == reflect.Interface </span><span class="cov0" title="0">{
+                v = v.Elem()
+                if !v.IsValid() </span><span class="cov0" title="0">{
+                        return nil, ErrGetFromNullObj
+                }</span>
+        }
+
+        <span class="cov8" title="1">switch v.Kind() </span>{
+        case reflect.Map:<span class="cov8" title="1">
+                // Check if map is nil
+                if v.IsNil() </span><span class="cov0" title="0">{
+                        return nil, ErrGetFromNullObj
+                }</span>
+
+                // Deep copy the map
+                <span class="cov8" title="1">newMap := reflect.MakeMap(v.Type())
+                for _, mapKey := range v.MapKeys() </span><span class="cov8" title="1">{
+                        newMap.SetMapIndex(mapKey, deepCopyValue(v.MapIndex(mapKey)))
+                }</span>
+
+                // Navigate to next level or set value
+                <span class="cov8" title="1">if idx+1 &gt;= len(steps) </span><span class="cov8" title="1">{
+                        // This is the final key - set the value
+                        mapKey := reflect.ValueOf(key)
+                        newMap.SetMapIndex(mapKey, reflect.ValueOf(value))
+                }</span> else<span class="cov8" title="1"> {
+                        // Navigate deeper
+                        mapKey := reflect.ValueOf(key)
+                        currentVal := v.MapIndex(mapKey)
+                        if !currentVal.IsValid() </span><span class="cov0" title="0">{
+                                return nil, fmt.Errorf("key error: %s not found in object", key)
+                        }</span>
+                        <span class="cov8" title="1">newVal, err := set_recursive(deepCopyValue(currentVal).Interface(), steps, idx+1, value)
+                        if err != nil </span><span class="cov8" title="1">{
+                                return nil, err
+                        }</span>
+                        <span class="cov8" title="1">newMap.SetMapIndex(mapKey, reflect.ValueOf(newVal))</span>
+                }
+                <span class="cov8" title="1">return newMap.Interface(), nil</span>
+
+        case reflect.Struct:<span class="cov8" title="1">
+                // Find the field by name or json tag
+                fieldIdx := -1
+                for i := 0; i &lt; v.NumField(); i++ </span><span class="cov8" title="1">{
+                        field := v.Type().Field(i)
+                        if field.Name == key </span><span class="cov8" title="1">{
+                                fieldIdx = i
+                                break</span>
+                        }
+                        <span class="cov8" title="1">if tag := field.Tag.Get("json"); tag != "" </span><span class="cov8" title="1">{
+                                if tag == key || strings.HasPrefix(tag, key+",") </span><span class="cov8" title="1">{
+                                        fieldIdx = i
+                                        break</span>
+                                }
+                        }
+                }
+
+                <span class="cov8" title="1">if fieldIdx &lt; 0 </span><span class="cov8" title="1">{
+                        return nil, fmt.Errorf("key error: %s not found in struct", key)
+                }</span>
+
+                // Create a copy of the struct
+                <span class="cov8" title="1">newStruct := reflect.New(v.Type()).Elem()
+                for i := 0; i &lt; v.NumField(); i++ </span><span class="cov8" title="1">{
+                        if i == fieldIdx </span><span class="cov8" title="1">{
+                                if idx+1 &gt;= len(steps) </span><span class="cov8" title="1">{
+                                        newStruct.Field(i).Set(reflect.ValueOf(value))
+                                }</span> else<span class="cov8" title="1"> {
+                                        newVal, err := set_recursive(deepCopyValue(v.Field(i)).Interface(), steps, idx+1, value)
+                                        if err != nil </span><span class="cov0" title="0">{
+                                                return nil, err
+                                        }</span>
+                                        <span class="cov8" title="1">newStruct.Field(i).Set(reflect.ValueOf(newVal))</span>
+                                }
+                        } else<span class="cov8" title="1"> {
+                                newStruct.Field(i).Set(v.Field(i))
+                        }</span>
+                }
+                <span class="cov8" title="1">return newStruct.Interface(), nil</span>
+
+        default:<span class="cov8" title="1">
+                return nil, fmt.Errorf("cannot set key on non-map/struct type: %s", v.Kind())</span>
+        }
+}
+
+// set_idx sets a value by index in a slice
+func set_idx(obj interface{}, step step, steps []step, idx int, value interface{}) (interface{}, error) <span class="cov8" title="1">{
+        if obj == nil </span><span class="cov8" title="1">{
+                return nil, ErrGetFromNullObj
+        }</span>
+
+        // Store original obj if we need to update a map later
+        <span class="cov8" title="1">var originalObj interface{}
+        var needToUpdateMap bool
+
+        // First, handle key if present (e.g., $.numbers[0] where key="numbers")
+        if len(step.key) &gt; 0 </span><span class="cov8" title="1">{
+                var err error
+                originalObj = obj
+                needToUpdateMap = true
+                obj, err = get_key(obj, step.key)
+                if err != nil </span><span class="cov8" title="1">{
+                        return nil, err
+                }</span>
+        }
+
+        <span class="cov8" title="1">v := reflect.ValueOf(obj)
+        // Unwrap interface to get the underlying value
+        if v.Kind() == reflect.Interface </span><span class="cov0" title="0">{
+                v = v.Elem()
+                if !v.IsValid() </span><span class="cov0" title="0">{
+                        return nil, ErrGetFromNullObj
+                }</span>
+        }
+        <span class="cov8" title="1">if v.Kind() != reflect.Slice </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("cannot index non-slice type: %s", v.Kind())
+        }</span>
+
+        // Get the index to set
+        <span class="cov8" title="1">indices := step.args.([]int)
+        if len(indices) == 0 </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("cannot index on empty slice")
+        }</span>
+
+        // For now, only support single index in set operations
+        <span class="cov8" title="1">targetIdx := indices[0]
+        length := v.Len()
+
+        // Handle negative index
+        if targetIdx &lt; 0 </span><span class="cov8" title="1">{
+                targetIdx = length + targetIdx
+        }</span>
+
+        <span class="cov8" title="1">if targetIdx &lt; 0 || targetIdx &gt;= length </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("index out of range: len: %v, idx: %v", length, targetIdx)
+        }</span>
+
+        // Create a new slice with copied elements
+        <span class="cov8" title="1">newSlice := reflect.MakeSlice(v.Type(), length, length)
+        for i := 0; i &lt; length; i++ </span><span class="cov8" title="1">{
+                if i == targetIdx </span><span class="cov8" title="1">{
+                        if idx+1 &gt;= len(steps) </span><span class="cov8" title="1">{
+                                // This is the final index - set the value
+                                newSlice.Index(i).Set(reflect.ValueOf(value))
+                        }</span> else<span class="cov8" title="1"> {
+                                // Navigate deeper
+                                newVal, err := set_recursive(deepCopyValue(v.Index(i)).Interface(), steps, idx+1, value)
+                                if err != nil </span><span class="cov0" title="0">{
+                                        return nil, err
+                                }</span>
+                                <span class="cov8" title="1">newSlice.Index(i).Set(reflect.ValueOf(newVal))</span>
+                        }
+                } else<span class="cov8" title="1"> {
+                        newSlice.Index(i).Set(v.Index(i))
+                }</span>
+        }
+
+        // If we had a key, we need to set the modified slice back to the original map
+        <span class="cov8" title="1">if needToUpdateMap </span><span class="cov8" title="1">{
+                // Get the type of the original map
+                origV := reflect.ValueOf(originalObj)
+                if origV.Kind() == reflect.Interface </span><span class="cov0" title="0">{
+                        origV = origV.Elem()
+                }</span>
+                <span class="cov8" title="1">if origV.Kind() != reflect.Map </span><span class="cov0" title="0">{
+                        return nil, fmt.Errorf("expected map when key is present, got %s", origV.Kind())
+                }</span>
+
+                // Create a new map with all keys copied and the target key updated
+                <span class="cov8" title="1">newMap := reflect.MakeMap(origV.Type())
+                for _, mapKey := range origV.MapKeys() </span><span class="cov8" title="1">{
+                        if mapKey.String() == step.key </span><span class="cov8" title="1">{
+                                newMap.SetMapIndex(mapKey, reflect.ValueOf(newSlice.Interface()))
+                        }</span> else<span class="cov8" title="1"> {
+                                newMap.SetMapIndex(mapKey, deepCopyValue(origV.MapIndex(mapKey)))
+                        }</span>
+                }
+                <span class="cov8" title="1">return newMap.Interface(), nil</span>
+        }
+
+        <span class="cov8" title="1">return newSlice.Interface(), nil</span>
+}
+
+// set_range sets values in a range in a slice
+func set_range(obj interface{}, step step, steps []step, idx int, value interface{}) (interface{}, error) <span class="cov8" title="1">{
+        if obj == nil </span><span class="cov8" title="1">{
+                return nil, ErrGetFromNullObj
+        }</span>
+
+        // First, handle key if present (e.g., $[:1].key or $.numbers[:1])
+        <span class="cov8" title="1">if len(step.key) &gt; 0 </span><span class="cov8" title="1">{
+                var err error
+                obj, err = get_key(obj, step.key)
+                if err != nil </span><span class="cov8" title="1">{
+                        return nil, err
+                }</span>
+        }
+
+        <span class="cov8" title="1">v := reflect.ValueOf(obj)
+        // Unwrap interface to get the underlying value
+        if v.Kind() == reflect.Interface </span><span class="cov0" title="0">{
+                v = v.Elem()
+                if !v.IsValid() </span><span class="cov0" title="0">{
+                        return nil, ErrGetFromNullObj
+                }</span>
+        }
+        <span class="cov8" title="1">if v.Kind() != reflect.Slice </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("cannot apply range on non-slice type: %s", v.Kind())
+        }</span>
+
+        <span class="cov8" title="1">args := step.args.([2]interface{})
+        length := v.Len()
+
+        // Parse from index
+        from := 0
+        if args[0] != nil </span><span class="cov8" title="1">{
+                from = args[0].(int)
+                if from &lt; 0 </span><span class="cov8" title="1">{
+                        from = length + from
+                }</span>
+        }
+
+        // Parse to index
+        <span class="cov8" title="1">to := length
+        if args[1] != nil </span><span class="cov8" title="1">{
+                to = args[1].(int)
+                if to &lt; 0 </span><span class="cov8" title="1">{
+                        to = length + to + 1
+                }</span>
+        }
+
+        // Clamp to valid range
+        <span class="cov8" title="1">if from &lt; 0 </span><span class="cov8" title="1">{
+                from = 0
+        }</span>
+        <span class="cov8" title="1">if to &gt; length </span><span class="cov8" title="1">{
+                to = length
+        }</span>
+        <span class="cov8" title="1">if from &gt; to </span><span class="cov8" title="1">{
+                from = to
+        }</span>
+
+        // Create a new slice with copied elements
+        <span class="cov8" title="1">newSlice := reflect.MakeSlice(v.Type(), length, length)
+        for i := 0; i &lt; length; i++ </span><span class="cov8" title="1">{
+                if i &gt;= from &amp;&amp; i &lt; to </span><span class="cov8" title="1">{
+                        if idx+1 &gt;= len(steps) </span><span class="cov8" title="1">{
+                                // This is the final range - set the values
+                                newSlice.Index(i).Set(reflect.ValueOf(value))
+                        }</span> else<span class="cov8" title="1"> {
+                                // Navigate deeper
+                                newVal, err := set_recursive(deepCopyValue(v.Index(i)).Interface(), steps, idx+1, value)
+                                if err != nil </span><span class="cov0" title="0">{
+                                        return nil, err
+                                }</span>
+                                <span class="cov8" title="1">newSlice.Index(i).Set(reflect.ValueOf(newVal))</span>
+                        }
+                } else<span class="cov8" title="1"> {
+                        newSlice.Index(i).Set(v.Index(i))
+                }</span>
+        }
+
+        <span class="cov8" title="1">return newSlice.Interface(), nil</span>
+}
+
+// deepCopy creates a deep copy of the given object
+func deepCopy(obj interface{}) interface{} <span class="cov8" title="1">{
+        if obj == nil </span><span class="cov8" title="1">{
+                return nil
+        }</span>
+
+        <span class="cov8" title="1">v := reflect.ValueOf(obj)
+        if !v.IsValid() </span><span class="cov0" title="0">{
+                return nil
+        }</span>
+
+        <span class="cov8" title="1">switch v.Kind() </span>{
+        case reflect.Map:<span class="cov8" title="1">
+                if v.IsNil() </span><span class="cov8" title="1">{
+                        return nil
+                }</span>
+                <span class="cov8" title="1">newMap := reflect.MakeMap(v.Type())
+                for _, key := range v.MapKeys() </span><span class="cov8" title="1">{
+                        newMap.SetMapIndex(key, deepCopyValue(v.MapIndex(key)))
+                }</span>
+                <span class="cov8" title="1">return newMap.Interface()</span>
+
+        case reflect.Slice:<span class="cov8" title="1">
+                if v.IsNil() </span><span class="cov8" title="1">{
+                        return nil
+                }</span>
+                <span class="cov8" title="1">newSlice := reflect.MakeSlice(v.Type(), v.Len(), v.Cap())
+                for i := 0; i &lt; v.Len(); i++ </span><span class="cov8" title="1">{
+                        newSlice.Index(i).Set(deepCopyValue(v.Index(i)))
+                }</span>
+                <span class="cov8" title="1">return newSlice.Interface()</span>
+
+        case reflect.Ptr:<span class="cov8" title="1">
+                if v.IsNil() </span><span class="cov8" title="1">{
+                        return nil
+                }</span>
+                <span class="cov8" title="1">newPtr := reflect.New(v.Type().Elem())
+                copiedVal := deepCopyValue(v.Elem())
+                newPtr.Elem().Set(copiedVal)
+                return newPtr.Interface()</span>
+
+        case reflect.Struct:<span class="cov8" title="1">
+                newStruct := reflect.New(v.Type()).Elem()
+                for i := 0; i &lt; v.NumField(); i++ </span><span class="cov8" title="1">{
+                        newStruct.Field(i).Set(deepCopyValue(v.Field(i)))
+                }</span>
+                <span class="cov8" title="1">return newStruct.Interface()</span>
+
+        default:<span class="cov8" title="1">
+                // Primitive types - return as is
+                return obj</span>
+        }
+}
+
+// deepCopyValue deep copies a reflect.Value and returns reflect.Value
+func deepCopyValue(v reflect.Value) reflect.Value <span class="cov8" title="1">{
+        if !v.IsValid() </span><span class="cov8" title="1">{
+                return reflect.ValueOf(nil)
+        }</span>
+
+        <span class="cov8" title="1">switch v.Kind() </span>{
+        case reflect.Interface:<span class="cov8" title="1">
+                // Unwrap interface and deep copy the underlying value
+                if v.IsNil() </span><span class="cov0" title="0">{
+                        return reflect.ValueOf(nil)
+                }</span>
+                <span class="cov8" title="1">return reflect.ValueOf(deepCopy(v.Elem().Interface()))</span>
+
+        case reflect.Map, reflect.Slice, reflect.Ptr, reflect.Struct:<span class="cov8" title="1">
+                copied := deepCopy(v.Interface())
+                return reflect.ValueOf(copied)</span>
+
+        default:<span class="cov8" title="1">
+                return v</span>
+        }
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>
