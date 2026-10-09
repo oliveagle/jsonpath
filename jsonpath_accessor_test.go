@@ -6,7 +6,10 @@
 
 package jsonpath
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 // Accessor tests - test get_key, get_idx, get_range, get_scan functions
 
@@ -175,6 +178,55 @@ func Test_jsonpath_get_range(t *testing.T) {
 	t.Logf("err: %v, res: %v", err, res)
 	if err == nil {
 		t.Errorf("object is Slice error not raised")
+	}
+}
+
+func Test_jsonpath_reversed_ranges(t *testing.T) {
+	type intSlice []int
+	inputs := []struct {
+		name string
+		obj  interface{}
+	}{
+		{"int_slice", []int{1, 2, 3, 4, 5}},
+		{"interface_slice", []interface{}{1, 2, 3, 4, 5}},
+		{"named_slice", intSlice{1, 2, 3, 4, 5}},
+	}
+	paths := []string{"$[3:1]", "$[-1:1]", "$[-1:-3]", "$[2:-10]", "$[3:0]", "$[2:2]"}
+	lookups := []struct {
+		name   string
+		lookup func(interface{}, string) (interface{}, error)
+	}{
+		{"direct", JsonPathLookup},
+		{"compiled", func(obj interface{}, path string) (interface{}, error) {
+			compiled, err := Compile(path)
+			if err != nil {
+				return nil, err
+			}
+			return compiled.Lookup(obj)
+		}},
+	}
+	for _, input := range inputs {
+		for _, path := range paths {
+			for _, lookup := range lookups {
+				t.Run(input.name+"/"+path+"/"+lookup.name, func(t *testing.T) {
+					defer func() {
+						if p := recover(); p != nil {
+							t.Errorf("lookup panicked: %v", p)
+						}
+					}()
+					res, err := lookup.lookup(input.obj, path)
+					if err != nil {
+						t.Fatalf("lookup failed: %v", err)
+					}
+					if reflect.TypeOf(res) != reflect.TypeOf(input.obj) {
+						t.Fatalf("result type = %T, want %T", res, input.obj)
+					}
+					if reflect.ValueOf(res).Len() != 0 {
+						t.Errorf("result = %v, want empty slice", res)
+					}
+				})
+			}
+		}
 	}
 }
 

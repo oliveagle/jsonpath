@@ -352,20 +352,13 @@ func Test_get_range_uncovered(t *testing.T) {
 	// Test: get_range negative to value (clamping to 0)
 	t.Run("get_range_negative_to_clamp", func(t *testing.T) {
 		obj := []interface{}{1, 2, 3, 4, 5}
-		// Negative to that would clamp below 0
-		// _to = 5 + (-10) + 1 = -4, clamped to 0
-		// But _frm = 2 > _to = 0, which causes panic in Slice
-		// This is actually a bug in the get_range function - it should check _frm > _to
-		// For now, we test a valid negative to case
-		res, err := get_range(obj, 0, -2)
+		res, err := get_range(obj, 2, -10)
 		if err != nil {
 			t.Fatalf("get_range failed: %v", err)
 		}
 		resSlice := res.([]interface{})
-		// _to = 5 + (-2) + 1 = 4
-		// Result should be [0:4] = 4 elements
-		if len(resSlice) != 4 {
-			t.Errorf("Expected 4, got %d", len(resSlice))
+		if len(resSlice) != 0 {
+			t.Errorf("Expected empty slice, got %d elements", len(resSlice))
 		}
 	})
 
@@ -1245,10 +1238,7 @@ func Test_get_range_more_coverage(t *testing.T) {
 	// Test: from >= to (returns empty slice)
 	t.Run("from_greater_or_equal_to", func(t *testing.T) {
 		obj := []interface{}{1, 2, 3, 4, 5}
-		// When from > to, the code clamps from to to, so from=3, to=1 becomes from=1, to=1
-		// This results in an empty slice [1:1]
-		// But the actual code may panic, so let's test a safer case
-		res, err := get_range(obj, 2, 2)
+		res, err := get_range(obj, 3, 1)
 		if err != nil {
 			t.Fatalf("get_range failed: %v", err)
 		}

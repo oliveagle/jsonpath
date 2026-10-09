@@ -584,6 +584,9 @@ func get_range(obj, frm, to interface{}) (interface{}, error) {
 		if _to > length {
 			_to = length
 		}
+		if _frm > _to {
+			_frm = _to
+		}
 		//fmt.Println("_frm, _to: ", _frm, _to)
 		res_v := reflect.ValueOf(obj).Slice(_frm, _to)
 		return res_v.Interface(), nil
